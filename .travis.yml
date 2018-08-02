@@ -1,0 +1,15 @@
+sudo: required
+language: go
+services:
+- docker
+go:
+- 1.10.2
+script:
+- docker build --rm -t 6congyao/cred .
+after_success:
+- docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD";
+- if [ "$TRAVIS_BRANCH" == "master" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; then
+  docker push 6congyao/cred;
+  else echo $TRAVIS_BRANCH; docker tag 6congyao/cred 6congyao/cred:$TRAVIS_BRANCH;
+  docker push 6congyao/cred:$TRAVIS_BRANCH;
+  fi
