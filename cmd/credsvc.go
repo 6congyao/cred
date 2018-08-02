@@ -18,14 +18,17 @@ package main
 import (
 	"github.com/go-kit/kit/log"
 	"os"
-
-	"fmt"
-	"net/http"
-	"os/signal"
 	"cred/pkg/endpoint"
 	"cred/pkg/service"
 	"cred/pkg/transport"
+	"fmt"
+	"net/http"
+	"os/signal"
 	"syscall"
+)
+
+const (
+	EnvPort = "CRED_PORT"
 )
 
 func main() {
@@ -39,13 +42,19 @@ func main() {
 
 	var (
 		service     = service.NewCred()
-		endpoints   = endpoint.MakeStsEndpoints(service, logger)
+		endpoints   = endpoint.MakeCredEndpoints(service, logger)
 		httpHandler = transport.NewHttpHandler(endpoints, logger)
 	)
 
 	go func() {
-		fmt.Println("Starting HTTP server at port 9011...")
-		ec <- http.ListenAndServe(":9011", httpHandler)
+		port := os.Getenv(EnvPort)
+
+		if port == "" {
+			port = ":9011"
+		}
+
+		fmt.Println("Starting HTTP server at port", port)
+		ec <- http.ListenAndServe(port, httpHandler)
 	}()
 
 	go func() {
@@ -53,5 +62,5 @@ func main() {
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		ec <- fmt.Errorf("%s", <-c)
 	}()
-	fmt.Println(<-ec)
+	<-ec
 }

@@ -21,7 +21,7 @@ import (
 
 type Service interface {
 	AssumeRole(ctx context.Context, role, principal string) (string, error)
-	Healthy(ctx context.Context) error
+	Health(ctx context.Context) error
 }
 
 type cred struct{}
@@ -31,23 +31,10 @@ func NewCred() Service {
 }
 
 func (c cred) AssumeRole(ctx context.Context, role, principal string) (string, error) {
-	// Firstly we check the resource-based-policy for the role if it could be assumed
-	//err := client.Evaluate(ctx, role, principal)
-	//if err != nil {
-	//	return "", err
-	//}
-	//
-	////Attempt to get an id token from issuer
-	//err = client.Issue(ctx)
-	//if err != nil {
-	//	return "", err
-	//}
-	//
-	//fmt.Println("evaluation was allowed")
 
 	return "", nil
 }
 
-func (c cred) Healthy(ctx context.Context) error {
+func (c cred) Health(ctx context.Context) error {
 	return nil
 }

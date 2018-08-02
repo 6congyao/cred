@@ -16,14 +16,13 @@
 package transport
 
 import (
-
 	"context"
+	"cred/pkg/endpoint"
 	"encoding/json"
 	"github.com/go-kit/kit/log"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
 	"net/http"
-	"cred/pkg/endpoint"
 )
 
 func NewHttpHandler(endpoints endpoint.Endpoints, logger log.Logger) http.Handler {
@@ -31,13 +30,23 @@ func NewHttpHandler(endpoints endpoint.Endpoints, logger log.Logger) http.Handle
 	options := []httptransport.ServerOption{
 		httptransport.ServerErrorLogger(logger),
 	}
+	r.Methods("GET").Path("/health").Handler(httptransport.NewServer(
+		endpoints.HealthEndpoint,
+		DecodeHTTPHealthRequest,
+		encodeHTTPGenericResponse,
+		options...,
+	))
 	r.Methods("POST").Path("/role").Handler(httptransport.NewServer(
 		endpoints.AssumeRoleEndpoint,
 		DecodeHTTPAssumeRoleRequest,
-		EncodeHTTPAssumeRoleResponse,
+		encodeHTTPGenericResponse,
 		options...,
 	))
 	return r
+}
+
+func DecodeHTTPHealthRequest(_ context.Context, _ *http.Request) (interface{}, error) {
+	return endpoint.HealthRequest{}, nil
 }
 
 func DecodeHTTPAssumeRoleRequest(_ context.Context, r *http.Request) (interface{}, error) {
@@ -47,7 +56,7 @@ func DecodeHTTPAssumeRoleRequest(_ context.Context, r *http.Request) (interface{
 	return req, err
 }
 
-func EncodeHTTPAssumeRoleResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+func encodeHTTPGenericResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if f, ok := response.(endpoint.Failer); ok && f.Failed() != nil {
 		errorEncoder(ctx, f.Failed(), w)
 		return nil

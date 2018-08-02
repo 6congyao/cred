@@ -17,28 +17,38 @@ package endpoint
 
 import (
 	"context"
+	"cred/pkg/service"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
-	"cred/pkg/service"
 )
 
-// Endpoints collects all of the endpoints that compose a sts service. It's
+// Endpoints collects all of the endpoints that compose a Cred service. It's
 // meant to be used as a helper struct, to collect all of the endpoints into a
 // single parameter.
 type Endpoints struct {
+	HealthEndpoint     endpoint.Endpoint
 	AssumeRoleEndpoint endpoint.Endpoint
 }
 
-func MakeStsEndpoints(svc service.Service, logger log.Logger) Endpoints {
+func MakeCredEndpoints(svc service.Service, logger log.Logger) Endpoints {
+	healthEdp := makeHealthEndpoint(svc)
+	healthEdp = LoggingMiddleware(log.With(logger, "method", "health"))(healthEdp)
 	assumeroleEdp := makeAssumeRoleEndpoint(svc)
 	assumeroleEdp = LoggingMiddleware(log.With(logger, "method", "AssumeRole"))(assumeroleEdp)
 	// todo: Prometheus
 	//assumeroleEdp = InstrumentingMiddleware(duration.With("method", "AssumeRole"))(assumeroleEdp)
 	return Endpoints{
+		HealthEndpoint:     healthEdp,
 		AssumeRoleEndpoint: assumeroleEdp,
 	}
 }
 
+func makeHealthEndpoint(svc service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		err = svc.Health(ctx)
+		return HealthResponse{}, err
+	}
+}
 func makeAssumeRoleEndpoint(svc service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(AssumeRoleRequest)
@@ -59,6 +69,10 @@ func makeAssumeRoleEndpoint(svc service.Service) endpoint.Endpoint {
 type Failer interface {
 	Failed() error
 }
+
+type HealthRequest struct{}
+
+type HealthResponse struct{}
 
 type AssumeRoleRequest struct {
 	DurationSeconds int64  `json:"duration_seconds"`
