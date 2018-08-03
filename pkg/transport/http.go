@@ -32,24 +32,24 @@ func NewHttpHandler(endpoints endpoint.Endpoints, logger log.Logger) http.Handle
 	}
 	r.Methods("GET").Path("/health").Handler(httptransport.NewServer(
 		endpoints.HealthEndpoint,
-		DecodeHTTPHealthRequest,
+		decodeHTTPHealthRequest,
 		encodeHTTPGenericResponse,
 		options...,
 	))
 	r.Methods("POST").Path("/role").Handler(httptransport.NewServer(
 		endpoints.AssumeRoleEndpoint,
-		DecodeHTTPAssumeRoleRequest,
+		decodeHTTPAssumeRoleRequest,
 		encodeHTTPGenericResponse,
 		options...,
 	))
 	return r
 }
 
-func DecodeHTTPHealthRequest(_ context.Context, _ *http.Request) (interface{}, error) {
+func decodeHTTPHealthRequest(_ context.Context, _ *http.Request) (interface{}, error) {
 	return endpoint.HealthRequest{}, nil
 }
 
-func DecodeHTTPAssumeRoleRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeHTTPAssumeRoleRequest(_ context.Context, r *http.Request) (interface{}, error) {
 	var req endpoint.AssumeRoleRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 

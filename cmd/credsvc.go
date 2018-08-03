@@ -16,14 +16,15 @@
 package main
 
 import (
-	"github.com/go-kit/kit/log"
-	"os"
 	"cred/pkg/endpoint"
 	"cred/pkg/service"
 	"cred/pkg/transport"
 	"fmt"
+	"github.com/go-kit/kit/log"
 	"net/http"
+	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 )
 
@@ -51,6 +52,10 @@ func main() {
 
 		if port == "" {
 			port = ":9011"
+		} else {
+			if !strings.HasPrefix(port, ":") {
+				port = ":" + port
+			}
 		}
 
 		fmt.Println("Starting HTTP server at port", port)
