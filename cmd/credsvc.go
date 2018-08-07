@@ -16,7 +16,9 @@
 package main
 
 import (
+	"cred/pkg/backend/etcdv3"
 	"cred/pkg/endpoint"
+	"cred/pkg/processor"
 	"cred/pkg/service"
 	"cred/pkg/transport"
 	"fmt"
@@ -29,7 +31,8 @@ import (
 )
 
 const (
-	EnvPort = "CRED_PORT"
+	EnvPort    = "CRED_PORT"
+	EnvMetaUrl = "CRED_META_URL"
 )
 
 func main() {
@@ -62,10 +65,36 @@ func main() {
 		ec <- http.ListenAndServe(port, httpHandler)
 	}()
 
-	go func() {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-		ec <- fmt.Errorf("%s", <-c)
-	}()
-	<-ec
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+
+	//machines := []string{"http://139.198.177.151:2379"}
+	//machines := []string{"http://139.198.120.106:2379"}
+
+	//time.Sleep(5* time.Second)
+	//cli.SetValues()
+	//cli.GetValues()
+
+	machines := []string{os.Getenv(EnvMetaUrl)}
+	client, err := etcdv3.NewEtcdClient(machines)
+
+	if err != nil {
+		ec <- err
+	}
+
+	stopChan := make(chan bool)
+	doneChan := make(chan bool)
+
+	watcher := processor.NewWatcher(client, stopChan, doneChan)
+	watcher.Process()
+
+	keeper := processor.NewKeeper(client, stopChan, doneChan)
+	keeper.Process()
+
+	select {
+	case err := <-ec:
+		fmt.Println(err.Error())
+	case s := <-signalChan:
+		fmt.Println(fmt.Sprintf("Captured %v. Exiting...", s))
+	}
 }
