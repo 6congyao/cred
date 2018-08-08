@@ -31,12 +31,14 @@ import (
 )
 
 const (
-	EnvPort    = "CRED_PORT"
-	EnvMetaUrl = "CRED_META_URL"
+	EnvPort      = "CRED_PORT"
+	EnvMetaUrl   = "CRED_META_URL"
+	MaxQueueSize = 20
 )
 
 func main() {
-	ec := make(chan error)
+	doneChan := make(chan struct{})
+	errChan := make(chan error, MaxQueueSize)
 	var logger log.Logger
 	{
 		logger = log.NewLogfmtLogger(os.Stderr)
@@ -62,7 +64,11 @@ func main() {
 		}
 
 		fmt.Println("Starting HTTP server at port", port)
-		ec <- http.ListenAndServe(port, httpHandler)
+		err := http.ListenAndServe(port, httpHandler)
+		if err != nil {
+			errChan <- err
+			close(doneChan)
+		}
 	}()
 
 	signalChan := make(chan os.Signal, 1)
@@ -79,22 +85,31 @@ func main() {
 	client, err := etcdv3.NewEtcdClient(machines)
 
 	if err != nil {
-		ec <- err
+		errChan <- err
+		close(doneChan)
 	}
 
-	stopChan := make(chan bool)
-	doneChan := make(chan bool)
+	credChan := make(chan string, MaxQueueSize)
 
-	watcher := processor.NewWatcher(client, stopChan, doneChan)
+	sync := processor.NewSync(client, credChan)
+	sync.Process()
+
+	watcher := processor.NewWatcher(client, credChan)
 	watcher.Process()
 
-	keeper := processor.NewKeeper(client, stopChan, doneChan)
+	keeper := processor.NewKeeper(client, credChan)
 	keeper.Process()
 
-	select {
-	case err := <-ec:
-		fmt.Println(err.Error())
-	case s := <-signalChan:
-		fmt.Println(fmt.Sprintf("Captured %v. Exiting...", s))
+	for {
+		select {
+		case err := <-errChan:
+			fmt.Println(err.Error())
+		case s := <-signalChan:
+			fmt.Println(fmt.Sprintf("Captured %v. Exiting...", s))
+			close(doneChan)
+		case <-doneChan:
+			os.Exit(0)
+		}
 	}
+
 }

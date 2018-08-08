@@ -17,6 +17,8 @@ package processor
 
 import (
 	"cred/pkg/backend/etcdv3"
+	"fmt"
+	"strings"
 )
 
 const (
@@ -31,28 +33,82 @@ type Processor interface {
 // Watcher monitoring the /iam/instance-profile
 type watcher struct {
 	cli      *etcdv3.Client
-	stopChan chan bool
-	doneChan chan bool
+	credChan chan string
 }
 
-func NewWatcher(cli *etcdv3.Client, stopChan, doneChan chan bool) Processor {
-	return &watcher{cli, stopChan, doneChan}
+func NewWatcher(cli *etcdv3.Client, credChan chan string) Processor {
+	return &watcher{cli, credChan}
 }
 
-func (w watcher) Process() {
-	go w.cli.WatchPrefix(WatcherKey)
+func (wa watcher) Process() {
+	go wa.cli.WatchPrefix(WatcherKey, func(t int32, k, v []byte) error {
+		switch t {
+		case 0:
+			fmt.Println("Put event:", string(k), string(v))
+			wa.credChan <- strings.TrimPrefix(string(k), WatcherKey)
+		case 1:
+			fmt.Println("Delete event:", string(k))
+		}
+		return nil
+	})
 }
 
 // Keeper monitoring the /iam/credential
 type keeper struct {
 	cli      *etcdv3.Client
-	stopChan chan bool
-	doneChan chan bool
+	credChan chan string
 }
 
-func NewKeeper(cli *etcdv3.Client, stopChan, doneChan chan bool) Processor {
-	return &keeper{cli, stopChan, doneChan}
+func NewKeeper(cli *etcdv3.Client, credChan chan string) Processor {
+	return &keeper{cli, credChan}
 }
-func (k keeper) Process() {
-	go k.cli.WatchPrefix(KeeperKey)
+
+func (ke keeper) Process() {
+	go ke.cli.WatchPrefix(KeeperKey, func(t int32, k, v []byte) error {
+		switch t {
+		case 0:
+			fmt.Println("Put event:", string(k), string(v))
+		case 1:
+			fmt.Println("Delete event:", string(k))
+			ke.credChan <- strings.TrimPrefix(string(k), KeeperKey)
+		}
+		return nil
+	})
+}
+
+// Sync getting and putting the data
+type sync struct {
+	cli      *etcdv3.Client
+	credChan chan string
+}
+
+func NewSync(cli *etcdv3.Client, credChan chan string) Processor {
+	return &sync{cli, credChan}
+}
+
+func (sy sync) Process() {
+	go func() {
+		fmt.Println("Waiting on sync...")
+		for v := range sy.credChan {
+			fmt.Println("credchan:", v)
+			sy.doSync(v)
+		}
+	}()
+}
+
+func (sy sync) doSync(id string) {
+	go func() {
+		//fmt.Println("start sync")
+		//defer fmt.Println("stop sync")
+		//time.Sleep(time.Duration(10)*time.Second)
+
+		bundle, err := sy.cli.GetSingleValue(WatcherKey + id)
+		if err != nil {
+			fmt.Println(err)
+		}
+		err = sy.cli.SetSingleValue(KeeperKey+id, string(bundle))
+		if err != nil {
+			fmt.Println(err)
+		}
+	}()
 }
