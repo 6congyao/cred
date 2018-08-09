@@ -39,6 +39,8 @@ const (
 func main() {
 	doneChan := make(chan struct{})
 	errChan := make(chan error, MaxQueueSize)
+	credChan := make(chan string, MaxQueueSize)
+
 	var logger log.Logger
 	{
 		logger = log.NewLogfmtLogger(os.Stderr)
@@ -47,7 +49,7 @@ func main() {
 	}
 
 	var (
-		service     = service.NewCred()
+		service     = service.NewCred(credChan)
 		endpoints   = endpoint.MakeCredEndpoints(service, logger)
 		httpHandler = transport.NewHttpHandler(endpoints, logger)
 	)
@@ -89,7 +91,7 @@ func main() {
 		close(doneChan)
 	}
 
-	credChan := make(chan string, MaxQueueSize)
+
 
 	sync := processor.NewSync(client, credChan)
 	sync.Process()

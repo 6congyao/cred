@@ -35,3 +35,9 @@ $ export CRED_PORT
 $ export CRED_META_URL
 $ export CRED_STS_URL
 ```
+
+## Todo:
+
+Integration with sts
+
+Distributed lock

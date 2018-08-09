@@ -36,9 +36,9 @@ func NewHttpHandler(endpoints endpoint.Endpoints, logger log.Logger) http.Handle
 		encodeHTTPGenericResponse,
 		options...,
 	))
-	r.Methods("POST").Path("/role").Handler(httptransport.NewServer(
-		endpoints.AssumeRoleEndpoint,
-		decodeHTTPAssumeRoleRequest,
+	r.Methods("POST").Path("/credential").Handler(httptransport.NewServer(
+		endpoints.RefreshCredentialEndpoint,
+		decodeHTTPRefreshCredentialRequest,
 		encodeHTTPGenericResponse,
 		options...,
 	))
@@ -49,8 +49,8 @@ func decodeHTTPHealthRequest(_ context.Context, _ *http.Request) (interface{}, e
 	return endpoint.HealthRequest{}, nil
 }
 
-func decodeHTTPAssumeRoleRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req endpoint.AssumeRoleRequest
+func decodeHTTPRefreshCredentialRequest(_ context.Context, r *http.Request) (interface{}, error) {
+	var req endpoint.RefreshCredentialRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 
 	return req, err

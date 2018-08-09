@@ -27,19 +27,19 @@ import (
 // single parameter.
 type Endpoints struct {
 	HealthEndpoint     endpoint.Endpoint
-	AssumeRoleEndpoint endpoint.Endpoint
+	RefreshCredentialEndpoint endpoint.Endpoint
 }
 
 func MakeCredEndpoints(svc service.Service, logger log.Logger) Endpoints {
 	healthEdp := makeHealthEndpoint(svc)
 	healthEdp = LoggingMiddleware(log.With(logger, "method", "health"))(healthEdp)
-	assumeroleEdp := makeAssumeRoleEndpoint(svc)
-	assumeroleEdp = LoggingMiddleware(log.With(logger, "method", "AssumeRole"))(assumeroleEdp)
+	refreshCredentialEdp := makeRefreshCredentialEndpoint(svc)
+	refreshCredentialEdp = LoggingMiddleware(log.With(logger, "method", "RefreshCredential"))(refreshCredentialEdp)
 	// todo: Prometheus
-	//assumeroleEdp = InstrumentingMiddleware(duration.With("method", "AssumeRole"))(assumeroleEdp)
+	//refreshCredentialEdp = InstrumentingMiddleware(duration.With("method", "RefreshCredential"))(refreshCredentialEdp)
 	return Endpoints{
 		HealthEndpoint:     healthEdp,
-		AssumeRoleEndpoint: assumeroleEdp,
+		RefreshCredentialEndpoint: refreshCredentialEdp,
 	}
 }
 
@@ -49,15 +49,15 @@ func makeHealthEndpoint(svc service.Service) endpoint.Endpoint {
 		return HealthResponse{}, err
 	}
 }
-func makeAssumeRoleEndpoint(svc service.Service) endpoint.Endpoint {
+
+func makeRefreshCredentialEndpoint(svc service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(AssumeRoleRequest)
-		token, err := svc.AssumeRole(ctx, req.RoleQrn, req.ExternalId)
+		req := request.(RefreshCredentialRequest)
+		err = svc.RefreshCredential(ctx, req.Target)
 		if err != nil {
 			return nil, err
 		}
-		return AssumeRoleResponse{
-			Token: token,
+		return RefreshCredentialResponse{
 			Err:   err,
 		}, nil
 	}
@@ -74,16 +74,12 @@ type HealthRequest struct{}
 
 type HealthResponse struct{}
 
-type AssumeRoleRequest struct {
-	DurationSeconds int64  `json:"duration_seconds"`
-	ExternalId      string `json:"external_id"`
-	Policy          string `json:"policy"`
-	RoleQrn         string `json:"role_qrn"`
+type RefreshCredentialRequest struct {
+	Target interface{}  `json:"target"`
 }
 
-type AssumeRoleResponse struct {
-	Token string `json:"token"`
+type RefreshCredentialResponse struct {
 	Err   error  `json:"err"`
 }
 
-func (r AssumeRoleResponse) Failed() error { return r.Err }
+func (r RefreshCredentialResponse) Failed() error { return r.Err }

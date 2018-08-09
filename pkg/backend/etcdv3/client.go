@@ -75,15 +75,15 @@ func (c *Client) WatchPrefix(prefix string, eh EventHandler) error {
 }
 
 func (c *Client) GetSingleValue(key string) ([]byte, error) {
-	var ret []byte
-	kresp, err := c.client.Get(context.Background(), key)
+	var ret []byte = nil
+	resp, err := c.client.Get(context.Background(), key)
 
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
 	}
 
-	for _, v := range kresp.Kvs {
+	for _, v := range resp.Kvs {
 		ret = v.Value
 	}
 	return ret, nil
@@ -95,6 +95,35 @@ func (c *Client) SetSingleValue(key, value string) error {
 	if err != nil {
 		fmt.Println(err)
 		return err
+	}
+	return nil
+}
+
+func (c *Client) SetSingleValueWithLease(key, value string, ttl int64) error {
+	resp, err := c.client.Grant(context.Background(), ttl)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	_, err = c.client.Put(context.Background(), key, value, clientv3.WithLease(resp.ID))
+
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	return nil
+}
+
+func (c *Client) DeleteKey(key string) error {
+	resp, err := c.client.Delete(context.Background(), key)
+
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	for _, v := range resp.PrevKvs {
+		fmt.Println(v.Key, v.Value)
 	}
 	return nil
 }

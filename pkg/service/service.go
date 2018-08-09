@@ -17,22 +17,28 @@ package service
 
 import (
 	"context"
+	"cred/utils"
 )
 
 type Service interface {
-	AssumeRole(ctx context.Context, role, principal string) (string, error)
+	RefreshCredential(ctx context.Context, target interface{}) error
 	Health(ctx context.Context) error
 }
 
-type cred struct{}
-
-func NewCred() Service {
-	return &cred{}
+type cred struct {
+	credChan chan string
 }
 
-func (c cred) AssumeRole(ctx context.Context, role, principal string) (string, error) {
+func NewCred(credChan chan string) Service {
+	return &cred{credChan}
+}
 
-	return "", nil
+func (c cred) RefreshCredential(ctx context.Context, target interface{}) error {
+	ids := utils.ToStringSlice(target)
+	for _, v := range ids {
+		c.credChan <- v
+	}
+	return nil
 }
 
 func (c cred) Health(ctx context.Context) error {
