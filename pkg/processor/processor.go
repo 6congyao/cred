@@ -17,6 +17,7 @@ package processor
 
 import (
 	"cred/pkg/backend/etcdv3"
+	"cred/pkg/backend/sts"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -26,6 +27,8 @@ const (
 	WatcherPrefix = "/iam/instance-profile/"
 	KeeperPrefix  = "/iam/lease/"
 	CredPrefix    = "/iam/credential/"
+
+	MaxQueueSize = 20
 )
 
 type Processor interface {
@@ -35,17 +38,17 @@ type Processor interface {
 // Watcher monitoring the /iam/instance-profile/
 type watcher struct {
 	cli      *etcdv3.Client
-	credChan chan string
+	syncChan chan string
 }
 
-func NewWatcher(cli *etcdv3.Client, credChan chan string) Processor {
-	return &watcher{cli, credChan}
+func NewWatcher(cli *etcdv3.Client) Processor {
+	return &watcher{cli, DefaultChans.SyncChan}
 }
 
 func (wa watcher) Process() {
 	go wa.cli.WatchPrefix(WatcherPrefix, func(t int32, k, v []byte) error {
 		// Trigger the sync immediately
-		wa.credChan <- strings.TrimPrefix(string(k), WatcherPrefix)
+		wa.syncChan <- strings.TrimPrefix(string(k), WatcherPrefix)
 
 		switch t {
 		case 0:
@@ -61,11 +64,11 @@ func (wa watcher) Process() {
 // Keeper monitoring the /iam/lease/
 type keeper struct {
 	cli      *etcdv3.Client
-	credChan chan string
+	syncChan chan string
 }
 
-func NewKeeper(cli *etcdv3.Client, credChan chan string) Processor {
-	return &keeper{cli, credChan}
+func NewKeeper(cli *etcdv3.Client) Processor {
+	return &keeper{cli, DefaultChans.SyncChan}
 }
 
 func (ke keeper) Process() {
@@ -75,7 +78,7 @@ func (ke keeper) Process() {
 			//fmt.Println("Put event:", string(k), string(v))
 		case 1:
 			//fmt.Println("Delete event:", string(k))
-			ke.credChan <- strings.TrimPrefix(string(k), KeeperPrefix)
+			ke.syncChan <- strings.TrimPrefix(string(k), KeeperPrefix)
 		}
 		return nil
 	})
@@ -83,19 +86,21 @@ func (ke keeper) Process() {
 
 // Sync attempt to write the data to /iam/credential/
 type sync struct {
-	cli      *etcdv3.Client
-	credChan chan string
+	etcdCli  *etcdv3.Client
+	stsCli   *sts.Client
+	syncChan chan string
+	ttl      int64
 }
 
-func NewSync(cli *etcdv3.Client, credChan chan string) Processor {
-	return &sync{cli, credChan}
+func NewSync(etcdCli *etcdv3.Client, stsCli *sts.Client, ttl int64) Processor {
+	return &sync{etcdCli, stsCli, DefaultChans.SyncChan, ttl}
 }
 
 func (sy sync) Process() {
 	go func() {
 		fmt.Println("Waiting on sync...")
-		for v := range sy.credChan {
-			fmt.Println("credchan got update on:", v)
+		for v := range sy.syncChan {
+			fmt.Println("SyncChan got update on:", v)
 			sy.doSync(v)
 		}
 	}()
@@ -105,25 +110,31 @@ func (sy sync) doSync(id string) {
 	go func() {
 		rid := "#" + fmt.Sprint(rand.Int63()%32768)
 		// Get bundle from WatcherPrefix
-		bundle, err := sy.cli.GetSingleValue(WatcherPrefix + id)
+		bundle, err := sy.etcdCli.GetSingleValue(WatcherPrefix + id)
 		if err != nil {
 			fmt.Println(err)
 		}
 		// Bundle goes to nil which means the key does not exist or error occurred
 		// We attempt to delete the credential key and left the lease for self-deleting
 		if bundle == nil {
-			sy.cli.DeleteKey(CredPrefix + id)
+			sy.etcdCli.DeleteKey(CredPrefix + id)
 			fmt.Println("Sync stoped due to missing key:", WatcherPrefix+id)
 			return
 		}
+		// Call sts AssumeRole
+		credential, err := sy.stsCli.AssumeRole(bundle)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 		// Set data to CredPrefix
-		err = sy.cli.SetSingleValue(CredPrefix+id, string(bundle)+rid)
+		err = sy.etcdCli.SetSingleValue(CredPrefix+id, string(credential))
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 		// Set ttl to KeeperPrefix
-		err = sy.cli.SetSingleValueWithLease(KeeperPrefix+id, rid, 10)
+		err = sy.etcdCli.SetSingleValueWithLease(KeeperPrefix+id, rid, sy.ttl)
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -131,3 +142,15 @@ func (sy sync) doSync(id string) {
 		fmt.Println("Sync successfully on random id:", rid)
 	}()
 }
+
+type chans struct {
+	DoneChan chan struct{}
+	ErrChan  chan error
+	SyncChan chan string
+}
+
+func NewChans() *chans {
+	return &chans{make(chan struct{}), make(chan error, MaxQueueSize), make(chan string, MaxQueueSize)}
+}
+
+var DefaultChans = NewChans()

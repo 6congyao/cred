@@ -26,20 +26,21 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
+	"cred/pkg/backend/sts"
 )
 
 const (
-	EnvPort      = "CRED_PORT"
-	EnvMetaUrl   = "CRED_META_URL"
-	MaxQueueSize = 20
+	EnvPort    = "CRED_PORT"
+	EnvMetaUrl = "CRED_META_URL"
+	EnvSTSUrl  = "CRED_STS_URL"
+	EnvTTL     = "CRED_SYNC_TTL"
 )
 
 func main() {
-	doneChan := make(chan struct{})
-	errChan := make(chan error, MaxQueueSize)
-	credChan := make(chan string, MaxQueueSize)
+	chans := processor.DefaultChans
 
 	var logger log.Logger
 	{
@@ -49,7 +50,7 @@ func main() {
 	}
 
 	var (
-		service     = service.NewCred(credChan)
+		service     = service.NewCred(chans.SyncChan)
 		endpoints   = endpoint.MakeCredEndpoints(service, logger)
 		httpHandler = transport.NewHttpHandler(endpoints, logger)
 	)
@@ -68,48 +69,51 @@ func main() {
 		fmt.Println("Starting HTTP server at port", port)
 		err := http.ListenAndServe(port, httpHandler)
 		if err != nil {
-			errChan <- err
-			close(doneChan)
+			chans.ErrChan <- err
+			close(chans.DoneChan)
 		}
 	}()
 
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
-	//machines := []string{"http://139.198.177.151:2379"}
-	//machines := []string{"http://139.198.120.106:2379"}
-
-	//time.Sleep(5* time.Second)
-	//cli.SetValues()
-	//cli.GetValues()
-
-	machines := []string{os.Getenv(EnvMetaUrl)}
-	client, err := etcdv3.NewEtcdClient(machines)
+	metasvc := []string{os.Getenv(EnvMetaUrl)}
+	etcdCli, err := etcdv3.NewEtcdClient(metasvc)
 
 	if err != nil {
-		errChan <- err
-		close(doneChan)
+		chans.ErrChan <- err
+		close(chans.DoneChan)
 	}
 
+	stssvc := os.Getenv(EnvSTSUrl)
+	stsCli := sts.NewStsClient(stssvc)
 
+	ttl, err := strconv.ParseInt(os.Getenv(EnvTTL), 10, 64)
+	if err != nil {
+		ttl = int64(20)
+	}
 
-	sync := processor.NewSync(client, credChan)
+	sync := processor.NewSync(etcdCli, stsCli, ttl)
 	sync.Process()
 
-	watcher := processor.NewWatcher(client, credChan)
+	watcher := processor.NewWatcher(etcdCli)
 	watcher.Process()
 
-	keeper := processor.NewKeeper(client, credChan)
+	keeper := processor.NewKeeper(etcdCli)
 	keeper.Process()
+
+	fmt.Println("Metadata url is:", metasvc)
+	fmt.Println("STS url is:", stssvc)
+	fmt.Println("Sync ttl is:", ttl)
 
 	for {
 		select {
-		case err := <-errChan:
+		case err := <-chans.ErrChan:
 			fmt.Println(err.Error())
 		case s := <-signalChan:
 			fmt.Println(fmt.Sprintf("Captured %v. Exiting...", s))
-			close(doneChan)
-		case <-doneChan:
+			close(chans.DoneChan)
+		case <-chans.DoneChan:
 			os.Exit(0)
 		}
 	}

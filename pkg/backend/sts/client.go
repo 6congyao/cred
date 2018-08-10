@@ -13,36 +13,41 @@
  * limitations under the License.
  */
 
-package service
+package sts
 
 import (
-	"context"
-	"cred/utils"
+	"bytes"
+	"cred/utils/pester"
+	"fmt"
+	"io/ioutil"
 )
 
-type Service interface {
-	RefreshCredential(ctx context.Context, target interface{}) error
-	Health(ctx context.Context) error
+type Client struct {
+	client  *pester.Client
+	baseUrl string
 }
 
-type cred struct {
-	syncChan chan string
+func NewStsClient(baseUrl string) *Client {
+	pst := pester.New()
+	pst.MaxRetries = 3
+	pst.KeepLog = true
+
+	return &Client{pst, baseUrl}
 }
 
-func NewCred(syncChan chan string) Service {
-	return &cred{syncChan}
-}
+func (c Client) AssumeRole(payload []byte) ([]byte, error) {
+	resp, err := c.client.Post(c.baseUrl+"/role", "application/json", bytes.NewReader(payload))
 
-func (c cred) RefreshCredential(ctx context.Context, target interface{}) error {
-	ids := utils.ToStringSlice(target)
-	for _, v := range ids {
-		if v != "" {
-			c.syncChan <- v
-		}
+	if err != nil {
+		fmt.Println("assume role error:", err)
+		return nil, err
 	}
-	return nil
-}
+	defer resp.Body.Close()
+	credential, err := ioutil.ReadAll(resp.Body)
 
-func (c cred) Health(ctx context.Context) error {
-	return nil
+	if err != nil {
+		return nil, err
+	}
+
+	return credential, nil
 }

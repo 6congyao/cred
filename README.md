@@ -31,13 +31,14 @@ Prepare the envs :
 $ CRED_PORT=<port> (Default: 9011)
 $ CRED_META_URL=<meta_url>
 $ CRED_STS_URL=<sts_url>
+$ CRED_SYNC_TTL=<sync_ttl> (Default: 3600)
+
 $ export CRED_PORT
 $ export CRED_META_URL
 $ export CRED_STS_URL
+$ export CRED_SYNC_TTL
 ```
 
 ## Todo:
-
-Integration with sts
 
 Distributed lock
