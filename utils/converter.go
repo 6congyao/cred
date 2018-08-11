@@ -143,6 +143,72 @@ func indirectToStringerOrError(a interface{}) interface{} {
 	return v.Interface()
 }
 
+func ToInt(i interface{}) int {
+	v, _ := ToIntE(i)
+	return v
+}
+
+func ToIntE(i interface{}) (int, error) {
+	i = indirect(i)
+
+	switch s := i.(type) {
+	case int:
+		return s, nil
+	case int64:
+		return int(s), nil
+	case int32:
+		return int(s), nil
+	case int16:
+		return int(s), nil
+	case int8:
+		return int(s), nil
+	case uint:
+		return int(s), nil
+	case uint64:
+		return int(s), nil
+	case uint32:
+		return int(s), nil
+	case uint16:
+		return int(s), nil
+	case uint8:
+		return int(s), nil
+	case float64:
+		return int(s), nil
+	case float32:
+		return int(s), nil
+	case string:
+		v, err := strconv.ParseInt(s, 0, 0)
+		if err == nil {
+			return int(v), nil
+		}
+		return 0, fmt.Errorf("unable to cast %#v of type %T to int", i, i)
+	case bool:
+		if s {
+			return 1, nil
+		}
+		return 0, nil
+	case nil:
+		return 0, nil
+	default:
+		return 0, fmt.Errorf("unable to cast %#v of type %T to int", i, i)
+	}
+}
+
+func indirect(a interface{}) interface{} {
+	if a == nil {
+		return nil
+	}
+	if t := reflect.TypeOf(a); t.Kind() != reflect.Ptr {
+		// Avoid creating a reflect.Value if it's not a pointer.
+		return a
+	}
+	v := reflect.ValueOf(a)
+	for v.Kind() == reflect.Ptr && !v.IsNil() {
+		v = v.Elem()
+	}
+	return v.Interface()
+}
+
 // ItoS transfer the value from interface{} to string slice.
 //func ItoS(i interface{}) ([]string) {
 //	var s []string = nil

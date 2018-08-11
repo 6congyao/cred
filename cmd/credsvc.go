@@ -17,19 +17,15 @@ package main
 
 import (
 	"cred/pkg/backend/etcdv3"
-	"cred/pkg/endpoint"
+	"cred/pkg/backend/sts"
 	"cred/pkg/processor"
-	"cred/pkg/service"
-	"cred/pkg/transport"
 	"fmt"
 	"github.com/go-kit/kit/log"
-	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"strings"
 	"syscall"
-	"cred/pkg/backend/sts"
 )
 
 const (
@@ -49,11 +45,11 @@ func main() {
 		logger = log.With(logger, "caller", log.DefaultCaller)
 	}
 
-	var (
-		service     = service.NewCred(chans.SyncChan)
-		endpoints   = endpoint.MakeCredEndpoints(service, logger)
-		httpHandler = transport.NewHttpHandler(endpoints, logger)
-	)
+	//var (
+	//	service     = service.NewCred(chans.SyncChan)
+	//	endpoints   = endpoint.MakeCredEndpoints(service, logger)
+	//	httpHandler = transport.NewHttpHandler(endpoints, logger)
+	//)
 
 	go func() {
 		port := os.Getenv(EnvPort)
@@ -66,12 +62,12 @@ func main() {
 			}
 		}
 
-		fmt.Println("Starting HTTP server at port", port)
-		err := http.ListenAndServe(port, httpHandler)
-		if err != nil {
-			chans.ErrChan <- err
-			close(chans.DoneChan)
-		}
+		//fmt.Println("Starting HTTP server at port", port)
+		//err := http.ListenAndServe(port, httpHandler)
+		//if err != nil {
+		//	fmt.Println(err)
+		//	close(chans.DoneChan)
+		//}
 	}()
 
 	signalChan := make(chan os.Signal, 1)
@@ -81,7 +77,7 @@ func main() {
 	etcdCli, err := etcdv3.NewEtcdClient(metasvc)
 
 	if err != nil {
-		chans.ErrChan <- err
+		fmt.Println(err)
 		close(chans.DoneChan)
 	}
 
@@ -93,7 +89,12 @@ func main() {
 		ttl = int64(20)
 	}
 
-	sync := processor.NewSync(etcdCli, stsCli, ttl)
+	cluster := &processor.Cluster{}
+
+	reg := processor.NewRegister(etcdCli, cluster)
+	reg.Process()
+
+	sync := processor.NewSync(etcdCli, stsCli, ttl, cluster)
 	sync.Process()
 
 	watcher := processor.NewWatcher(etcdCli)
@@ -102,6 +103,7 @@ func main() {
 	keeper := processor.NewKeeper(etcdCli)
 	keeper.Process()
 
+	fmt.Println("Cluster id is:", cluster.Pid)
 	fmt.Println("Metadata url is:", metasvc)
 	fmt.Println("STS url is:", stssvc)
 	fmt.Println("Sync ttl is:", ttl)

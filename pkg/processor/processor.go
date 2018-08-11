@@ -20,15 +20,28 @@ import (
 	"cred/pkg/backend/sts"
 	"fmt"
 	"math/rand"
+	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const (
+	// Instance profile key, watching
 	WatcherPrefix = "/iam/instance-profile/"
-	KeeperPrefix  = "/iam/lease/"
-	CredPrefix    = "/iam/credential/"
+	// Credential timer key, watching, ttl
+	KeeperPrefix = "/iam/lease/"
+	// Register key, watching, ttl
+	RegPrefix = "/iam/reg/"
+
+	CredPrefix = "/iam/credential/"
+	// Lock key, ttl
+	MutexPrefix = "/iam/mutex/"
+	// Flag key, ttl
+	FlagPrefix = "/iam/flag/"
 
 	MaxQueueSize = 20
+	LockTTL      = 5
 )
 
 type Processor interface {
@@ -90,18 +103,19 @@ type sync struct {
 	stsCli   *sts.Client
 	syncChan chan string
 	ttl      int64
+	cluster  *Cluster
 }
 
-func NewSync(etcdCli *etcdv3.Client, stsCli *sts.Client, ttl int64) Processor {
-	return &sync{etcdCli, stsCli, DefaultChans.SyncChan, ttl}
+func NewSync(etcdCli *etcdv3.Client, stsCli *sts.Client, ttl int64, cluster *Cluster) Processor {
+	return &sync{etcdCli, stsCli, DefaultChans.SyncChan, ttl, cluster}
 }
 
 func (sy sync) Process() {
 	go func() {
-		fmt.Println("Waiting on sync...")
+		fmt.Println("Waiting on sync channel...")
 		for v := range sy.syncChan {
-			fmt.Println("SyncChan got update on:", v)
-			sy.doSync(v)
+			fmt.Println("SyncChan got an update on:", v)
+			sy.doSyncMock(v)
 		}
 	}()
 }
@@ -109,10 +123,35 @@ func (sy sync) Process() {
 func (sy sync) doSync(id string) {
 	go func() {
 		rid := "#" + fmt.Sprint(rand.Int63()%32768)
+		s, m, err := sy.etcdCli.Lock(MutexPrefix+id, LockTTL)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		defer sy.etcdCli.Unlock(s, m)
+
+		// Check the offset flag
+		flag, err := sy.etcdCli.GetSingleValue(FlagPrefix + id)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		// Skip if offset <= cluster size
+		if flag != nil {
+			offset, _ := strconv.ParseInt(string(flag), 0, 0)
+
+			if offset < sy.cluster.Size {
+				offset = offset + 1
+				sy.etcdCli.SetSingleValueWithLease(FlagPrefix+id, strconv.Itoa(int(offset)), LockTTL)
+				return
+			}
+		}
+
 		// Get bundle from WatcherPrefix
 		bundle, err := sy.etcdCli.GetSingleValue(WatcherPrefix + id)
 		if err != nil {
 			fmt.Println(err)
+			return
 		}
 		// Bundle goes to nil which means the key does not exist or error occurred
 		// We attempt to delete the credential key and left the lease for self-deleting
@@ -139,8 +178,153 @@ func (sy sync) doSync(id string) {
 			fmt.Println(err)
 			return
 		}
-		fmt.Println("Sync successfully on random id:", rid)
+		// Set flag to 1 so that following n-1 (n = cluster size) watchers could skip
+		// The flag will be deleted after LockTTL
+		err = sy.etcdCli.SetSingleValueWithLease(FlagPrefix+id, strconv.Itoa(int(1)), LockTTL)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Println("Sync successfully on id:", fmt.Sprintf("%v", sy.cluster.Pid), id)
 	}()
+}
+
+func (sy sync) doSyncMock(id string) {
+	go func() {
+		rid := "#" + fmt.Sprint(rand.Int63()%32768)
+		//fmt.Println("### Cluster size is", sy.cluster.Size)
+		//fmt.Println("### Try to lock:", sy.cluster.Pid)
+		s, m, err := sy.etcdCli.Lock(MutexPrefix+id, LockTTL)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		defer sy.etcdCli.Unlock(s, m)
+
+		//fmt.Println("### Get the lock:", sy.cluster.Pid)
+		// Check the offset flag
+		flag, err := sy.etcdCli.GetSingleValue(FlagPrefix + id)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		//fmt.Println("### Flag is", string(flag))
+		// Skip if offset <= cluster size
+		if flag != nil {
+			offset, _ := strconv.ParseInt(string(flag), 0, 0)
+
+			//fmt.Println("### offset is ", offset)
+			if offset < sy.cluster.Size {
+				offset = offset + 1
+				sy.etcdCli.SetSingleValueWithLease(FlagPrefix+id, strconv.Itoa(int(offset)), LockTTL)
+				fmt.Println("### SKIP and set offset to", offset, id)
+				return
+			}
+			fmt.Println("!!! skip is ignore due to offset is %v, cluster size is", offset, sy.cluster.Size)
+		}
+
+		// Get bundle from WatcherPrefix
+		bundle, err := sy.etcdCli.GetSingleValue(WatcherPrefix + id)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		//fmt.Println("### Bundle is", bundle)
+		// Bundle goes to nil which means the key does not exist or error occurred
+		// We attempt to delete the credential key and left the lease for self-deleting
+		if bundle == nil {
+			sy.etcdCli.DeleteKey(CredPrefix + id)
+			fmt.Println("Sync stoped due to missing key:", WatcherPrefix+id)
+			return
+		}
+		// Call sts AssumeRole
+		credential, err := sy.stsCli.AssumeRoleMock(bundle)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		//fmt.Println("### credential is", credential)
+		// Set data to CredPrefix
+		err = sy.etcdCli.SetSingleValue(CredPrefix+id, string(credential)+fmt.Sprintf("%v", sy.cluster.Pid))
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		//fmt.Println("### credential write to", CredPrefix+id)
+		// Set ttl to KeeperPrefix
+		err = sy.etcdCli.SetSingleValueWithLease(KeeperPrefix+id, rid, 10)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		//fmt.Println("### credential ttl set to", KeeperPrefix+id)
+		// Set flag to 1 so that following n-1 (n = cluster size) watchers could skip
+		// The flag will be deleted after LockTTL
+		err = sy.etcdCli.SetSingleValueWithLease(FlagPrefix+id, strconv.Itoa(int(1)), LockTTL)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		//fmt.Println("### flag set to %s value is", FlagPrefix + id, 1)
+		fmt.Println("@@@ SYNC successfully on id:", fmt.Sprintf("%v", sy.cluster.Pid), id)
+	}()
+}
+
+// Sync attempt to write the data to /iam/credential/
+type register struct {
+	cli      *etcdv3.Client
+	cluster  *Cluster
+	doneChan chan struct{}
+}
+
+func NewRegister(cli *etcdv3.Client, cluster *Cluster) Processor {
+	return &register{cli, cluster, DefaultChans.DoneChan}
+}
+
+func (re register) Process() {
+	c := make(chan struct{})
+	go func() {
+		defer close(c)
+		re.cluster.Pid = os.Getpid()
+		re.doRegister()
+
+		re.cluster.Size, _ = re.cli.GetKeyNumber(RegPrefix)
+	}()
+	<-c
+
+	go re.cli.WatchPrefix(RegPrefix, func(t int32, k, v []byte) error {
+		if t == 1 {
+			if string(k) == re.cluster.RegKey {
+				re.doRegister()
+				//fmt.Println("Cluster Regkey changes to:", re.cluster.RegKey)
+			}
+		}
+		re.cluster.Size, _ = re.cli.GetKeyNumber(RegPrefix)
+		fmt.Println("Cluster size changes to:", re.cluster.Size)
+		return nil
+	})
+	fmt.Println("Cluster Regkey is:", re.cluster.RegKey)
+	fmt.Println("Cluster size is:", re.cluster.Size)
+}
+
+func (re register) doRegister() {
+	key := fmt.Sprintf("%s%x", RegPrefix, re.cluster.Pid)
+	for {
+		_, regkey, err := re.cli.Register(key, LockTTL)
+		if err != nil {
+			fmt.Println(err)
+			time.Sleep(time.Duration(1) * time.Second)
+		} else {
+			re.cluster.RegKey = regkey
+			break
+		}
+	}
+}
+
+type Cluster struct {
+	Size   int64
+	Pid    int
+	RegKey string
 }
 
 type chans struct {

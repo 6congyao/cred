@@ -16,8 +16,8 @@
 package utils
 
 import (
-	"testing"
 	"log"
+	"testing"
 )
 
 const checkPass = "\u2713"
@@ -31,8 +31,8 @@ func TestItoS(t *testing.T) {
 	}{
 
 		{[]interface{}{0, "bbb"}, []string{"0", "bbb"}},
-		{[]interface{}{false, "bbb"}, []string{"false" ,"bbb"}},
-		{[]interface{}{true, "bbb"}, []string{"true" ,"bbb"}},
+		{[]interface{}{false, "bbb"}, []string{"false", "bbb"}},
+		{[]interface{}{true, "bbb"}, []string{"true", "bbb"}},
 		{[]interface{}{66666, "bbb"}, []string{"66666", "bbb"}},
 		{"ccccc", []string{"ccccc"}},
 		{[]interface{}{"qrn:user/max", "qrn:group/dev"}, []string{"qrn:user/max", "qrn:group/dev"}},
@@ -48,21 +48,19 @@ func TestItoS(t *testing.T) {
 		{[]interface{}{"qrn:qws:s3:::max/*,qrn:qws:s3:::min/*"}, []string{"qrn:qws:s3:::max/*,qrn:qws:s3:::min/*"}},
 		{"qrn:qws:s3:::max/*,qrn:qws:s3:::min/*", []string{"qrn:qws:s3:::max/*,qrn:qws:s3:::min/*"}},
 		{[]interface{}{2147483646, "-2147483646"}, []string{"2147483646", "-2147483646"}},
-		{[]interface{}{2147483648, -2147483647}, []string{"2147483648", "-2147483647"}}, //pow(2,31)
-		{[]interface{}{4294967296, "-4294967296"}, []string{"4294967296", "-4294967296"}},//pow(2,32)
-		{[]interface{}{4294967297, "-4294967297"}, []string{"4294967297", "-4294967297"}},//pow(2,32)+1
+		{[]interface{}{2147483648, -2147483647}, []string{"2147483648", "-2147483647"}},   //pow(2,31)
+		{[]interface{}{4294967296, "-4294967296"}, []string{"4294967296", "-4294967296"}}, //pow(2,32)
+		{[]interface{}{4294967297, "-4294967297"}, []string{"4294967297", "-4294967297"}}, //pow(2,32)+1
 		{[]interface{}{9294967297, "-4294967297"}, []string{"9294967297", "-4294967297"}},
 		{[]interface{}{1.1, "-0.0"}, []string{"1.1", "-0.0"}},
 		{[]interface{}{float64(1000000), "-0.0"}, []string{"1000000", "-0.0"}},
-		{[]interface{}{1000000.1, "-0.0"}, []string{"1000000.1", "-0.0"}},//fixed
-
+		{[]interface{}{1000000.1, "-0.0"}, []string{"1000000.1", "-0.0"}}, //fixed
 
 		{"s3:GetObject", []string{"s3:GetObject"}},
-
 	} {
 		if !compare(ToStringSlice(c.input), c.output) {
-			t.Errorf("Error! case %d input:%#v output:%#v correct:%s %s",k+1,c.input, ToStringSlice(c.input), c.output, checkFail)
-		}else {
+			t.Errorf("Error! case %d input:%#v output:%#v correct:%s %s", k+1, c.input, ToStringSlice(c.input), c.output, checkFail)
+		} else {
 			//t.Logf("PASS! case %d input:%#v output:%#v correct:%s %s",k+1,c.input, ToStringSlice(c.input), c.output, checkPass)
 		}
 	}

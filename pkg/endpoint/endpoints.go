@@ -26,7 +26,7 @@ import (
 // meant to be used as a helper struct, to collect all of the endpoints into a
 // single parameter.
 type Endpoints struct {
-	HealthEndpoint     endpoint.Endpoint
+	HealthEndpoint            endpoint.Endpoint
 	RefreshCredentialEndpoint endpoint.Endpoint
 }
 
@@ -38,7 +38,7 @@ func MakeCredEndpoints(svc service.Service, logger log.Logger) Endpoints {
 	// todo: Prometheus
 	//refreshCredentialEdp = InstrumentingMiddleware(duration.With("method", "RefreshCredential"))(refreshCredentialEdp)
 	return Endpoints{
-		HealthEndpoint:     healthEdp,
+		HealthEndpoint:            healthEdp,
 		RefreshCredentialEndpoint: refreshCredentialEdp,
 	}
 }
@@ -58,7 +58,7 @@ func makeRefreshCredentialEndpoint(svc service.Service) endpoint.Endpoint {
 			return nil, err
 		}
 		return RefreshCredentialResponse{
-			Err:   err,
+			Err: err,
 		}, nil
 	}
 }
@@ -75,11 +75,11 @@ type HealthRequest struct{}
 type HealthResponse struct{}
 
 type RefreshCredentialRequest struct {
-	Target interface{}  `json:"target"`
+	Target interface{} `json:"target"`
 }
 
 type RefreshCredentialResponse struct {
-	Err   error  `json:"err"`
+	Err error `json:"err"`
 }
 
 func (r RefreshCredentialResponse) Failed() error { return r.Err }

@@ -20,6 +20,7 @@ import (
 	"cred/utils/pester"
 	"fmt"
 	"io/ioutil"
+	"time"
 )
 
 type Client struct {
@@ -50,4 +51,9 @@ func (c Client) AssumeRole(payload []byte) ([]byte, error) {
 	}
 
 	return credential, nil
+}
+
+func (c Client) AssumeRoleMock(payload []byte) ([]byte, error) {
+	time.Sleep(time.Duration(5) * time.Second)
+	return payload, nil
 }

@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/coreos/etcd/clientv3"
+	"github.com/coreos/etcd/clientv3/concurrency"
 	"time"
 )
 
@@ -89,6 +90,17 @@ func (c *Client) GetSingleValue(key string) ([]byte, error) {
 	return ret, nil
 }
 
+func (c *Client) GetKeyNumber(prefix string) (int64, error) {
+	resp, err := c.client.Get(context.Background(), prefix, clientv3.WithPrefix())
+
+	if err != nil {
+		fmt.Println(err)
+		return 0, err
+	}
+
+	return resp.Count, nil
+}
+
 func (c *Client) SetSingleValue(key, value string) error {
 	_, err := c.client.Put(context.Background(), key, value)
 
@@ -128,7 +140,52 @@ func (c *Client) DeleteKey(key string) error {
 	return nil
 }
 
-func (c *Client) Lock(key string, lease int) error {
-	// todo
+func (c *Client) Lock(key string, ttl int64) (*concurrency.Session, *concurrency.Mutex, error) {
+	resp, err := c.client.Grant(context.Background(), ttl)
+	if err != nil {
+		fmt.Println(err)
+		return nil, nil, err
+	}
+
+	s, err := concurrency.NewSession(c.client, concurrency.WithLease(resp.ID))
+	if err != nil {
+		fmt.Println(err)
+		return nil, nil, err
+	}
+
+	m := concurrency.NewMutex(s, key)
+	if err := m.Lock(context.Background()); err != nil {
+		fmt.Println(err)
+		return nil, nil, err
+	}
+	return s, m, nil
+}
+
+func (c *Client) Unlock(s *concurrency.Session, m *concurrency.Mutex) error {
+	defer s.Close()
+	if err := m.Unlock(context.Background()); err != nil {
+		fmt.Println(err)
+		return err
+	}
 	return nil
+}
+
+func (c *Client) Register(key string, ttl int64) (*concurrency.Session, string, error) {
+	resp, err := c.client.Grant(context.Background(), ttl)
+	if err != nil {
+		fmt.Println(err)
+		return nil, "", err
+	}
+
+	s, err := concurrency.NewSession(c.client, concurrency.WithLease(resp.ID))
+	if err != nil {
+		fmt.Println(err)
+		return nil, "", err
+	}
+
+	myKey := fmt.Sprintf("%s%x", key+"/", s.Lease())
+
+	c.client.Put(context.Background(), myKey, "", clientv3.WithLease(s.Lease()))
+
+	return s, myKey, nil
 }

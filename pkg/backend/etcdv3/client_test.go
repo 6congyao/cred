@@ -17,8 +17,8 @@ package etcdv3
 
 import (
 	"os"
+	"strconv"
 	"testing"
-	"time"
 )
 
 const (
@@ -26,45 +26,117 @@ const (
 )
 
 var client *Client
+var client2 *Client
+var c chan struct{}
 
 func init() {
 	machines := []string{os.Getenv("CRED_META_URL")}
 	client, _ = NewEtcdClient(machines)
+	client2, _ = NewEtcdClient(machines)
+	c = make(chan struct{})
 }
 
-func TestSetSingleValueWithLease(t *testing.T) {
-	key := "/iam/credential/testttl"
+func TestGetKeyNumber(t *testing.T) {
+	prefix := "/iam/credential/"
+	//prefix := "/iam/instance-profile/"
+	expected := int64(5)
+	actual, _ := client.GetKeyNumber(prefix)
+	if actual != expected {
+		t.Errorf("Expected the result to be %v but instead got %v", expected, actual)
+	}
+}
 
-	expected := "expected"
-	client.SetSingleValueWithLease(key, expected, ttl)
-	actual, _ := client.GetSingleValue(key)
-	if string(actual) == expected {
-		time.Sleep(time.Duration(ttl+2) * time.Second)
-		actual, _ = client.GetSingleValue(key)
-		if actual != nil {
-			t.Errorf("Expected the result to be nil but instead got %s", actual)
-		}
+//func TestLock(t *testing.T) {
+//	fmt.Println("acquired lock 1")
+//	prefix := "/iam/mutex/1"
+//	s, m, err := client.Lock(prefix, 25)
+//	if err != nil {
+//		t.Errorf("Expected the lock successfully but got %s", err)
+//	}
+//	defer client.Unlock(s, m)
+//	fmt.Println("Locked 1")
+//
+//	//time.Sleep(time.Duration(20)* time.Second)
+//	//go func() {
+//	//	defer close(c)
+//	//	fmt.Println("acquired lock 2")
+//	//	_, err := client.Lock(prefix, 20)
+//	//	if err != nil{
+//	//
+//	//	}
+//	//	fmt.Println("Locked 2")
+//	//
+//	//}()
+////time.Sleep(time.Duration(10)* time.Second)
+//	//client.Unlock(m1, 1)
+//	fmt.Println("lock 1 released")
+//	//err = client.Unlock(m, 1)
+//	//if err != nil {
+//	//	t.Errorf("Expected the lock successfully but got %s", err)
+//	//}
+//	//<-c
+//}
+
+//func TestLock2(t *testing.T) {
+//	go func() {
+//		defer close(c)
+//		fmt.Println("acquired lock 2")
+//		prefix := "/iam/mutex"
+//		_, err := client2.Lock(prefix, 20)
+//		if err != nil {
+//			t.Errorf("Expected the lock successfully but got %s", err)
+//		}
+//		fmt.Println("Locked 2")
+//		//err = client.Unlock(m, 1)
+//		//if err != nil {
+//		//	t.Errorf("Expected the lock successfully but got %s", err)
+//		//}
+//	}()
+//	<-c
+//}
+
+func TestSetSingleValueWithLease(t *testing.T) {
+	key := "/iam/flag/i-lu"
+
+	expected := 3
+	client.SetSingleValueWithLease(key, strconv.Itoa(expected), 30)
+	value, _ := client.GetSingleValue(key)
+	actual, _ := strconv.Atoi(string(value))
+	if actual != expected {
+		//time.Sleep(time.Duration(ttl+2) * time.Second)
+		//actual, _ = client.GetSingleValue(key)
+		//if actual != nil {
+		//	t.Errorf("Expected the result to be nil but instead got %s", actual)
+		//}
+		t.Errorf("Expected the result to be %v but instead got %v", expected, actual)
 	}
 }
 
 func TestSetSingleValue(t *testing.T) {
-	key := "/iam/credential/testset"
+	key := "/iam/flag/i-lu"
 
-	expected := "expected"
-	client.SetSingleValue(key, expected)
-	actual, _ := client.GetSingleValue(key)
-	if string(actual) != expected {
+	expected := 6
+	client.SetSingleValue(key, strconv.Itoa(expected))
+	value, _ := client.GetSingleValue(key)
+	actual, _ := strconv.Atoi(string(value))
+	if actual != expected {
 		t.Errorf("Expected the result to be %s but instead got %s", expected, actual)
 	}
 }
 
 func TestGetWithNoExistKey(t *testing.T) {
-	key := "/noexistkey"
+	key := "/iam/flag/i-lu"
 
-	var expected []byte = nil
+	expected := 6
 	actual, _ := client.GetSingleValue(key)
-	if string(actual) != string(expected) {
-		t.Errorf("Expected the result to be %s but instead got %s", expected, actual)
+	v, _ := strconv.ParseInt(string(actual), 0, 0)
+
+	i := int(v)
+	//if string(actual) != string(expected) {
+	//	t.Errorf("Expected the result to be %s but instead got %s", expected, actual)
+	//}
+	if i != expected {
+		t.Errorf("Expected the result to be %v but instead got %v", expected, i)
 	}
 }
 
