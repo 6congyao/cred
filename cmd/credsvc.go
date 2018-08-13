@@ -18,9 +18,14 @@ package main
 import (
 	"cred/pkg/backend/etcdv3"
 	"cred/pkg/backend/sts"
+	"cred/pkg/endpoint"
 	"cred/pkg/processor"
+	"cred/pkg/service"
+	"cred/pkg/transport"
+	"flag"
 	"fmt"
 	"github.com/go-kit/kit/log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -35,9 +40,44 @@ const (
 	EnvTTL     = "CRED_SYNC_TTL"
 )
 
+type Config struct {
+	Mock bool
+}
+
+var config Config
+
+func init() {
+	flag.BoolVar(&config.Mock, "mock", false, "enable mock mode")
+}
+
 func main() {
+	flag.Parse()
 	chans := processor.DefaultChans
 
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+
+	if config.Mock == false {
+		runHttpServer(chans)
+	}
+
+	runProcessor(chans, config)
+
+	for {
+		select {
+		case err := <-chans.ErrChan:
+			fmt.Println(err.Error())
+		case s := <-signalChan:
+			fmt.Println(fmt.Sprintf("Captured %v. Exiting...", s))
+			close(chans.DoneChan)
+		case <-chans.DoneChan:
+			os.Exit(0)
+		}
+	}
+
+}
+
+func runHttpServer(chans *processor.Chans) {
 	var logger log.Logger
 	{
 		logger = log.NewLogfmtLogger(os.Stderr)
@@ -45,12 +85,11 @@ func main() {
 		logger = log.With(logger, "caller", log.DefaultCaller)
 	}
 
-	//var (
-	//	service     = service.NewCred(chans.SyncChan)
-	//	endpoints   = endpoint.MakeCredEndpoints(service, logger)
-	//	httpHandler = transport.NewHttpHandler(endpoints, logger)
-	//)
-
+	var (
+		service     = service.NewCred(chans.SyncChan)
+		endpoints   = endpoint.MakeCredEndpoints(service, logger)
+		httpHandler = transport.NewHttpHandler(endpoints, logger)
+	)
 	go func() {
 		port := os.Getenv(EnvPort)
 
@@ -62,34 +101,33 @@ func main() {
 			}
 		}
 
-		//fmt.Println("Starting HTTP server at port", port)
-		//err := http.ListenAndServe(port, httpHandler)
-		//if err != nil {
-		//	fmt.Println(err)
-		//	close(chans.DoneChan)
-		//}
+		fmt.Println("Starting HTTP server at port", port)
+		err := http.ListenAndServe(port, httpHandler)
+		if err != nil {
+			fmt.Println(err)
+			close(chans.DoneChan)
+		}
 	}()
+}
 
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
-
-	metasvc := []string{os.Getenv(EnvMetaUrl)}
-	etcdCli, err := etcdv3.NewEtcdClient(metasvc)
+func runProcessor(chans *processor.Chans, config Config) {
+	metaUrl := []string{os.Getenv(EnvMetaUrl)}
+	etcdCli, err := etcdv3.NewEtcdClient(metaUrl)
 
 	if err != nil {
 		fmt.Println(err)
 		close(chans.DoneChan)
 	}
 
-	stssvc := os.Getenv(EnvSTSUrl)
-	stsCli := sts.NewStsClient(stssvc)
+	stsUrl := os.Getenv(EnvSTSUrl)
+	stsCli := sts.NewStsClient(stsUrl)
 
 	ttl, err := strconv.ParseInt(os.Getenv(EnvTTL), 10, 64)
 	if err != nil {
 		ttl = int64(20)
 	}
 
-	cluster := &processor.Cluster{}
+	cluster := &processor.Cluster{Mock: config.Mock}
 
 	reg := processor.NewRegister(etcdCli, cluster)
 	reg.Process()
@@ -104,20 +142,7 @@ func main() {
 	keeper.Process()
 
 	fmt.Println("Cluster id is:", cluster.Pid)
-	fmt.Println("Metadata url is:", metasvc)
-	fmt.Println("STS url is:", stssvc)
+	fmt.Println("Metadata url is:", metaUrl)
+	fmt.Println("STS url is:", stsUrl)
 	fmt.Println("Sync ttl is:", ttl)
-
-	for {
-		select {
-		case err := <-chans.ErrChan:
-			fmt.Println(err.Error())
-		case s := <-signalChan:
-			fmt.Println(fmt.Sprintf("Captured %v. Exiting...", s))
-			close(chans.DoneChan)
-		case <-chans.DoneChan:
-			os.Exit(0)
-		}
-	}
-
 }

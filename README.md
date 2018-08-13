@@ -39,6 +39,19 @@ $ export CRED_STS_URL
 $ export CRED_SYNC_TTL
 ```
 
-## Todo:
+Run cred
+```sh
+$ credsvc
+```
 
-Distributed lock
+Run cred with mock mode, neither http server nor sts involved
+```sh
+$ credsvc -mock
+```
+
+## Features:
+
+1. Cluster with self-registration
+2. Watcher mutex based on distributed lock
+3. Http API for operation and maintenance
+4. Mock mode support skipping the interactive with sts for easily testing

@@ -49,9 +49,10 @@ type Processor interface {
 }
 
 // Watcher monitoring the /iam/instance-profile/
+// To keep tracking the update/remove for instance profile
 type watcher struct {
 	cli      *etcdv3.Client
-	syncChan chan string
+	syncChan chan<- string
 }
 
 func NewWatcher(cli *etcdv3.Client) Processor {
@@ -75,9 +76,10 @@ func (wa watcher) Process() {
 }
 
 // Keeper monitoring the /iam/lease/
+// To keep tracking the lifecycle/timeout of temporary credential
 type keeper struct {
 	cli      *etcdv3.Client
-	syncChan chan string
+	syncChan chan<- string
 }
 
 func NewKeeper(cli *etcdv3.Client) Processor {
@@ -97,11 +99,12 @@ func (ke keeper) Process() {
 	})
 }
 
-// Sync attempt to write the data to /iam/credential/
+// Sync attempt to talk with sts
+// Write the temporary credential to metadata server within /iam/credential/
 type sync struct {
 	etcdCli  *etcdv3.Client
 	stsCli   *sts.Client
-	syncChan chan string
+	syncChan <-chan string
 	ttl      int64
 	cluster  *Cluster
 }
@@ -115,7 +118,11 @@ func (sy sync) Process() {
 		fmt.Println("Waiting on sync channel...")
 		for v := range sy.syncChan {
 			fmt.Println("SyncChan got an update on:", v)
-			sy.doSyncMock(v)
+			if sy.cluster.Mock {
+				sy.doSyncMock(v)
+			} else {
+				sy.doSync(v)
+			}
 		}
 	}()
 }
@@ -325,16 +332,17 @@ type Cluster struct {
 	Size   int64
 	Pid    int
 	RegKey string
+	Mock   bool
 }
 
-type chans struct {
+type Chans struct {
 	DoneChan chan struct{}
 	ErrChan  chan error
 	SyncChan chan string
 }
 
-func NewChans() *chans {
-	return &chans{make(chan struct{}), make(chan error, MaxQueueSize), make(chan string, MaxQueueSize)}
+func NewChans() *Chans {
+	return &Chans{make(chan struct{}), make(chan error, MaxQueueSize), make(chan string, MaxQueueSize)}
 }
 
 var DefaultChans = NewChans()
