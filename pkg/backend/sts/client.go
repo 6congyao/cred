@@ -18,8 +18,10 @@ package sts
 import (
 	"bytes"
 	"cred/utils/pester"
+	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"time"
 )
 
@@ -44,6 +46,10 @@ func (c Client) AssumeRole(payload []byte) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New(fmt.Sprintf("AssumeRole error with status [%d]", resp.StatusCode))
+	}
 	credential, err := ioutil.ReadAll(resp.Body)
 
 	if err != nil {

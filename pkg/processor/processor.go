@@ -167,31 +167,35 @@ func (sy sync) doSync(id string) {
 			fmt.Println("Sync stoped due to missing key:", WatcherPrefix+id)
 			return
 		}
-		// Call sts AssumeRole
+		// Attempt to call sts AssumeRole
 		credential, err := sy.stsCli.AssumeRole(bundle)
-		if err != nil {
+		// Succeed
+		if err == nil {
+			// Set credential data to CredPrefix
+			err = sy.etcdCli.SetSingleValue(CredPrefix+id, string(credential))
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			// Set flag to 1 so that following n-1 (n = cluster size) watchers could escape
+			// The flag will be deleted after LockTTL
+			err = sy.etcdCli.SetSingleValueWithLease(FlagPrefix+id, strconv.Itoa(int(1)), LockTTL)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+		} else {
 			fmt.Println(err)
-			return
 		}
-		// Set data to CredPrefix
-		err = sy.etcdCli.SetSingleValue(CredPrefix+id, string(credential))
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		// Set ttl to KeeperPrefix
+
+		// Whatever, We keep setting ttl to KeeperPrefix
 		err = sy.etcdCli.SetSingleValueWithLease(KeeperPrefix+id, rid, sy.ttl)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		// Set flag to 1 so that following n-1 (n = cluster size) watchers could skip
-		// The flag will be deleted after LockTTL
-		err = sy.etcdCli.SetSingleValueWithLease(FlagPrefix+id, strconv.Itoa(int(1)), LockTTL)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+
 		fmt.Println("Sync successfully on id:", fmt.Sprintf("%v", sy.cluster.Pid), id)
 	}()
 }
@@ -246,28 +250,29 @@ func (sy sync) doSyncMock(id string) {
 		}
 		// Call sts AssumeRole
 		credential, err := sy.stsCli.AssumeRoleMock(bundle)
-		if err != nil {
+		// Succeed
+		if err == nil {
+			// Set credential data to CredPrefix
+			err = sy.etcdCli.SetSingleValue(CredPrefix+id, string(credential)+fmt.Sprintf("%v", sy.cluster.Pid))
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			// Set flag to 1 so that following n-1 (n = cluster size) watchers could escape
+			// The flag will be deleted after LockTTL
+			err = sy.etcdCli.SetSingleValueWithLease(FlagPrefix+id, strconv.Itoa(int(1)), LockTTL)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+		} else {
 			fmt.Println(err)
-			return
 		}
-		//fmt.Println("### credential is", credential)
-		// Set data to CredPrefix
-		err = sy.etcdCli.SetSingleValue(CredPrefix+id, string(credential)+fmt.Sprintf("%v", sy.cluster.Pid))
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+
 		//fmt.Println("### credential write to", CredPrefix+id)
 		// Set ttl to KeeperPrefix
 		err = sy.etcdCli.SetSingleValueWithLease(KeeperPrefix+id, rid, 10)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		//fmt.Println("### credential ttl set to", KeeperPrefix+id)
-		// Set flag to 1 so that following n-1 (n = cluster size) watchers could skip
-		// The flag will be deleted after LockTTL
-		err = sy.etcdCli.SetSingleValueWithLease(FlagPrefix+id, strconv.Itoa(int(1)), LockTTL)
 		if err != nil {
 			fmt.Println(err)
 			return
