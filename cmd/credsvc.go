@@ -23,7 +23,6 @@ import (
 	"cred/pkg/service"
 	"cred/pkg/transport"
 	"flag"
-	"fmt"
 	"github.com/go-kit/kit/log"
 	"net/http"
 	"os"
@@ -31,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	loggerUtils "cred/utils/logger"
 )
 
 const (
@@ -66,9 +66,11 @@ func main() {
 	for {
 		select {
 		case err := <-chans.ErrChan:
-			fmt.Println(err.Error())
+			loggerUtils.Error.Print(err)
+			//fmt.Println(time.Now().Format("2006-01-02 15:04:05"), err.Error())
 		case s := <-signalChan:
-			fmt.Println(fmt.Sprintf("Captured %v. Exiting...", s))
+			loggerUtils.Error.Printf("Captured %v. Exiting...", s)
+			//fmt.Println(fmt.Sprintf("%s\t|Captured %v. Exiting...", time.Now().Format("2006-01-02 15:04:05"), s))
 			close(chans.DoneChan)
 		case <-chans.DoneChan:
 			os.Exit(0)
@@ -101,10 +103,12 @@ func runHttpServer(chans *processor.Chans) {
 			}
 		}
 
-		fmt.Println("Starting HTTP server at port", port)
+		//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Starting HTTP server at port", port)
+		loggerUtils.Info.Printf("Starting HTTP server at port %s", port)
 		err := http.ListenAndServe(port, httpHandler)
 		if err != nil {
-			fmt.Println(err)
+			//fmt.Println(err)
+			loggerUtils.Error.Print(err)
 			close(chans.DoneChan)
 		}
 	}()
@@ -115,7 +119,8 @@ func runProcessor(chans *processor.Chans, config Config) {
 	etcdCli, err := etcdv3.NewEtcdClient(metaUrl)
 
 	if err != nil {
-		fmt.Println(err)
+		loggerUtils.Error.Print(err)
+		//fmt.Println(err)
 		close(chans.DoneChan)
 	}
 
@@ -141,8 +146,13 @@ func runProcessor(chans *processor.Chans, config Config) {
 	keeper := processor.NewKeeper(etcdCli)
 	keeper.Process()
 
-	fmt.Println("Cluster id is:", cluster.Pid)
-	fmt.Println("Metadata url is:", metaUrl)
-	fmt.Println("STS url is:", stsUrl)
-	fmt.Println("Sync ttl is:", ttl)
+	loggerUtils.Info.Printf("Cluster id is: %d", cluster.Pid)
+	loggerUtils.Info.Printf("Metadata url is: %s", metaUrl)
+	loggerUtils.Info.Printf("STS url is: %s", stsUrl)
+	loggerUtils.Info.Printf("Sync ttl is: %d", ttl)
+
+	//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Cluster id is:", cluster.Pid)
+	//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Metadata url is:", metaUrl)
+	//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"STS url is:", stsUrl)
+	//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Sync ttl is:", ttl)
 }

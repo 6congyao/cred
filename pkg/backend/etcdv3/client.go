@@ -21,6 +21,7 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/clientv3/concurrency"
 	"time"
+	"cred/utils/logger"
 )
 
 type EventHandler func(t int32, k, v []byte) error
@@ -46,7 +47,8 @@ func NewEtcdClient(machines []string) (*Client, error) {
 
 func (c *Client) WatchPrefix(prefix string, eh EventHandler) error {
 	rch := c.client.Watch(context.Background(), prefix, clientv3.WithPrefix())
-	fmt.Println("Watch created on", prefix)
+	//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Watch created on", prefix)
+	logger.Info.Printf("Watch created on %s", prefix)
 	for {
 		for wresp := range rch {
 			for _, event := range wresp.Events {
@@ -67,7 +69,8 @@ func (c *Client) WatchPrefix(prefix string, eh EventHandler) error {
 		}
 
 		// Reconnect while lost or closed
-		fmt.Println("Warning, connection lost on", prefix)
+		//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Warning, connection lost on", prefix)
+		logger.Warn.Printf("Connection lost on %s", prefix)
 		time.Sleep(time.Duration(1) * time.Second)
 		rch = c.client.Watch(context.Background(), prefix, clientv3.WithPrefix())
 	}
@@ -80,7 +83,8 @@ func (c *Client) GetSingleValue(key string) ([]byte, error) {
 	resp, err := c.client.Get(context.Background(), key)
 
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
+		logger.Error.Print(err)
 		return nil, err
 	}
 
@@ -94,7 +98,8 @@ func (c *Client) GetKeyNumber(prefix string) (int64, error) {
 	resp, err := c.client.Get(context.Background(), prefix, clientv3.WithPrefix())
 
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
+		logger.Error.Print(err)
 		return 0, err
 	}
 
@@ -105,7 +110,8 @@ func (c *Client) SetSingleValue(key, value string) error {
 	_, err := c.client.Put(context.Background(), key, value)
 
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
+		logger.Error.Print(err)
 		return err
 	}
 	return nil
@@ -114,14 +120,16 @@ func (c *Client) SetSingleValue(key, value string) error {
 func (c *Client) SetSingleValueWithLease(key, value string, ttl int64) error {
 	resp, err := c.client.Grant(context.Background(), ttl)
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
+		logger.Error.Print(err)
 		return err
 	}
 
 	_, err = c.client.Put(context.Background(), key, value, clientv3.WithLease(resp.ID))
 
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
+		logger.Error.Print(err)
 		return err
 	}
 	return nil
@@ -131,11 +139,13 @@ func (c *Client) DeleteKey(key string) error {
 	resp, err := c.client.Delete(context.Background(), key)
 
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
+		logger.Error.Print(err)
 		return err
 	}
 	for _, v := range resp.PrevKvs {
-		fmt.Println(v.Key, v.Value)
+		//fmt.Println(v.Key, v.Value)
+		logger.Info.Print(v.Key, v.Value)
 	}
 	return nil
 }
@@ -143,19 +153,22 @@ func (c *Client) DeleteKey(key string) error {
 func (c *Client) Lock(key string, ttl int64) (*concurrency.Session, *concurrency.Mutex, error) {
 	resp, err := c.client.Grant(context.Background(), ttl)
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
+		logger.Error.Print(err)
 		return nil, nil, err
 	}
 
 	s, err := concurrency.NewSession(c.client, concurrency.WithLease(resp.ID))
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
+		logger.Error.Print(err)
 		return nil, nil, err
 	}
 
 	m := concurrency.NewMutex(s, key)
 	if err := m.Lock(context.Background()); err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
+		logger.Error.Print(err)
 		return nil, nil, err
 	}
 	return s, m, nil
@@ -164,7 +177,8 @@ func (c *Client) Lock(key string, ttl int64) (*concurrency.Session, *concurrency
 func (c *Client) Unlock(s *concurrency.Session, m *concurrency.Mutex) error {
 	defer s.Close()
 	if err := m.Unlock(context.Background()); err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
+		logger.Error.Print(err)
 		return err
 	}
 	return nil
@@ -173,13 +187,15 @@ func (c *Client) Unlock(s *concurrency.Session, m *concurrency.Mutex) error {
 func (c *Client) Register(key string, ttl int64) (*concurrency.Session, string, error) {
 	resp, err := c.client.Grant(context.Background(), ttl)
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
+		logger.Error.Print(err)
 		return nil, "", err
 	}
 
 	s, err := concurrency.NewSession(c.client, concurrency.WithLease(resp.ID))
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
+		logger.Error.Print(err)
 		return nil, "", err
 	}
 

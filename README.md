@@ -28,15 +28,11 @@ $ dep ensure
 
 Prepare the envs :
 ```sh
-$ CRED_PORT=<port> (Default: 9011)
-$ CRED_META_URL=<meta_url>
-$ CRED_STS_URL=<sts_url>
-$ CRED_SYNC_TTL=<sync_ttl> (Default: 3600)
-
-$ export CRED_PORT
-$ export CRED_META_URL
-$ export CRED_STS_URL
-$ export CRED_SYNC_TTL
+export CRED_PORT=<port> (Default: 9011)
+export CRED_META_URL=<meta_url>
+export CRED_STS_URL=<sts_url>
+export CRED_SYNC_TTL=<sync_ttl> (Default: 3600)
+export CRED_LOG_LEVEL=<debug/info/warning/error> (Default: error)
 ```
 
 Run cred
@@ -55,3 +51,6 @@ $ credsvc -mock
 2. Watcher mutex based on distributed lock
 3. Http API for operation and maintenance
 4. Mock mode support skipping the interactive with sts for easily testing
+
+## TODO
+ put withrev 和 refresh all

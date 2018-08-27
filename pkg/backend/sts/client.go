@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"time"
+	"cred/utils/logger"
 )
 
 type Client struct {
@@ -42,7 +43,8 @@ func (c Client) AssumeRole(payload []byte) ([]byte, error) {
 	resp, err := c.client.Post(c.baseUrl+"/role", "application/json", bytes.NewReader(payload))
 
 	if err != nil {
-		fmt.Println("assume role error:", err)
+		//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"assume role error:", err)
+		logger.Error.Printf("assume role error:%s", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
