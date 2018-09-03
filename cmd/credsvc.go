@@ -67,10 +67,8 @@ func main() {
 		select {
 		case err := <-chans.ErrChan:
 			loggerUtils.Error.Print(err)
-			//fmt.Println(time.Now().Format("2006-01-02 15:04:05"), err.Error())
 		case s := <-signalChan:
 			loggerUtils.Error.Printf("Captured %v. Exiting...", s)
-			//fmt.Println(fmt.Sprintf("%s\t|Captured %v. Exiting...", time.Now().Format("2006-01-02 15:04:05"), s))
 			close(chans.DoneChan)
 		case <-chans.DoneChan:
 			os.Exit(0)
@@ -103,11 +101,9 @@ func runHttpServer(chans *processor.Chans) {
 			}
 		}
 
-		//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Starting HTTP server at port", port)
 		loggerUtils.Info.Printf("Starting HTTP server at port %s", port)
 		err := http.ListenAndServe(port, httpHandler)
 		if err != nil {
-			//fmt.Println(err)
 			loggerUtils.Error.Print(err)
 			close(chans.DoneChan)
 		}
@@ -115,12 +111,11 @@ func runHttpServer(chans *processor.Chans) {
 }
 
 func runProcessor(chans *processor.Chans, config Config) {
-	metaUrl := []string{os.Getenv(EnvMetaUrl)}
+	metaUrl := strings.Split(os.Getenv("CRED_META_URL"), ",")
 	etcdCli, err := etcdv3.NewEtcdClient(metaUrl)
 
 	if err != nil {
 		loggerUtils.Error.Print(err)
-		//fmt.Println(err)
 		close(chans.DoneChan)
 	}
 
@@ -150,9 +145,4 @@ func runProcessor(chans *processor.Chans, config Config) {
 	loggerUtils.Info.Printf("Metadata url is: %s", metaUrl)
 	loggerUtils.Info.Printf("STS url is: %s", stsUrl)
 	loggerUtils.Info.Printf("Sync ttl is: %d", ttl)
-
-	//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Cluster id is:", cluster.Pid)
-	//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Metadata url is:", metaUrl)
-	//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"STS url is:", stsUrl)
-	//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Sync ttl is:", ttl)
 }

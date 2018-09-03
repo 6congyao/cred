@@ -19,6 +19,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"strings"
 )
 
 const (
@@ -30,7 +31,7 @@ var client2 *Client
 var c chan struct{}
 
 func init() {
-	machines := []string{os.Getenv("CRED_META_URL")}
+	machines := strings.Split(os.Getenv("CRED_META_URL"), ",")
 	client, _ = NewEtcdClient(machines)
 	client2, _ = NewEtcdClient(machines)
 	c = make(chan struct{})

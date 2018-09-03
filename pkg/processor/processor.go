@@ -67,10 +67,8 @@ func (wa watcher) Process() {
 
 		switch t {
 		case 0:
-			//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Put event:", string(k), string(v))
 			logger.Info.Printf("Put event: %s %s", string(k), string(v))
 		case 1:
-			//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Delete event:", string(k))
 			logger.Info.Printf("Delete event: %s", string(k))
 		}
 		return nil
@@ -117,11 +115,8 @@ func NewSync(etcdCli *etcdv3.Client, stsCli *sts.Client, ttl int64, cluster *Clu
 
 func (sy sync) Process() {
 	go func() {
-		//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Waiting on sync channel...")
 		logger.Info.Print("Waiting on sync channel...")
 		for v := range sy.syncChan {
-			//fmt.Println(fmt.Sprintf("%s\t| SyncChan got an update on: %s", time.Now().Format("2006-01-02 15:04:05"), v))
-			//fmt.Println("SyncChan got an update on:", v)
 			logger.Info.Printf("SyncChan got an update on: %s", v)
 			if sy.cluster.Mock {
 				sy.doSyncMock(v)
@@ -137,7 +132,6 @@ func (sy sync) doSync(id string) {
 		rid := "#" + fmt.Sprint(rand.Int63()%32768)
 		s, m, err := sy.etcdCli.Lock(MutexPrefix+id, LockTTL)
 		if err != nil {
-			//fmt.Println(err)
 			logger.Error.Print(err)
 			return
 		}
@@ -146,7 +140,6 @@ func (sy sync) doSync(id string) {
 		// Check the offset flag
 		flag, err := sy.etcdCli.GetSingleValue(FlagPrefix + id)
 		if err != nil {
-			//fmt.Println(err)
 			logger.Error.Print(err)
 			return
 		}
@@ -164,7 +157,6 @@ func (sy sync) doSync(id string) {
 		// Get bundle from WatcherPrefix
 		bundle, err := sy.etcdCli.GetSingleValue(WatcherPrefix + id)
 		if err != nil {
-			//fmt.Println(err)
 			logger.Error.Print(err)
 			return
 		}
@@ -172,7 +164,6 @@ func (sy sync) doSync(id string) {
 		// We attempt to delete the credential key and left the lease for self-deleting
 		if bundle == nil {
 			sy.etcdCli.DeleteKey(CredPrefix + id)
-			//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Sync stoped due to missing key:", WatcherPrefix+id)
 			logger.Info.Printf("Sync stoped due to missing key: %s%s", WatcherPrefix, id)
 			return
 		}
@@ -183,7 +174,6 @@ func (sy sync) doSync(id string) {
 			// Set credential data to CredPrefix
 			err = sy.etcdCli.SetSingleValue(CredPrefix+id, string(credential))
 			if err != nil {
-				//fmt.Println(err)
 				logger.Error.Print(err)
 				return
 			}
@@ -192,25 +182,20 @@ func (sy sync) doSync(id string) {
 			// The flag will be deleted after LockTTL
 			err = sy.etcdCli.SetSingleValueWithLease(FlagPrefix+id, strconv.Itoa(int(1)), LockTTL)
 			if err != nil {
-				//fmt.Println(err)
 				logger.Error.Print(err)
 				return
 			}
 		} else {
-			//fmt.Println(err)
 			logger.Error.Print(err)
 		}
 
 		// Whatever, We keep setting ttl to KeeperPrefix
 		err = sy.etcdCli.SetSingleValueWithLease(KeeperPrefix+id, rid, sy.ttl)
 		if err != nil {
-			//fmt.Println(err)
 			logger.Error.Print(err)
 			return
 		}
 
-		//fmt.Println(fmt.Sprintf("%s\t| Sync successfully on id: %v %s", time.Now().Format("2006-01-02 15:04:05"), sy.cluster.Pid, id))
-		//fmt.Println("Sync successfully on id:", fmt.Sprintf("%v", sy.cluster.Pid), id)
 		logger.Info.Printf("Sync successfully on id: %v %s", sy.cluster.Pid, id)
 	}()
 }
@@ -222,7 +207,6 @@ func (sy sync) doSyncMock(id string) {
 		//fmt.Println("### Try to lock:", sy.cluster.Pid)
 		s, m, err := sy.etcdCli.Lock(MutexPrefix+id, LockTTL)
 		if err != nil {
-			//fmt.Println(err)
 			logger.Error.Print(err)
 			return
 		}
@@ -232,7 +216,6 @@ func (sy sync) doSyncMock(id string) {
 		// Check the offset flag
 		flag, err := sy.etcdCli.GetSingleValue(FlagPrefix + id)
 		if err != nil {
-			//fmt.Println(err)
 			logger.Error.Print(err)
 			return
 		}
@@ -245,18 +228,15 @@ func (sy sync) doSyncMock(id string) {
 			if offset < sy.cluster.Size {
 				offset = offset + 1
 				sy.etcdCli.SetSingleValueWithLease(FlagPrefix+id, strconv.Itoa(int(offset)), LockTTL)
-				//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"### SKIP and set offset to", offset, id)
 				logger.Info.Printf("### SKIP and set offset to %d %s", offset, id)
 				return
 			}
-			//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"!!! skip is ignore due to offset is %v, cluster size is", offset, sy.cluster.Size)
 			logger.Info.Printf("!!! skip is ignore due to offset is %v, cluster size is %d", offset, sy.cluster.Size)
 		}
 
 		// Get bundle from WatcherPrefix
 		bundle, err := sy.etcdCli.GetSingleValue(WatcherPrefix + id)
 		if err != nil {
-			//fmt.Println(err)
 			logger.Error.Print(err)
 			return
 		}
@@ -265,7 +245,6 @@ func (sy sync) doSyncMock(id string) {
 		// We attempt to delete the credential key and left the lease for self-deleting
 		if bundle == nil {
 			sy.etcdCli.DeleteKey(CredPrefix + id)
-			//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Sync stoped due to missing key:", WatcherPrefix+id)
 			logger.Info.Printf("Sync stoped due to missing key: %s%s", WatcherPrefix, id)
 			return
 		}
@@ -276,7 +255,6 @@ func (sy sync) doSyncMock(id string) {
 			// Set credential data to CredPrefix
 			err = sy.etcdCli.SetSingleValue(CredPrefix+id, string(credential)+fmt.Sprintf("%v", sy.cluster.Pid))
 			if err != nil {
-				//fmt.Println(err)
 				logger.Error.Print(err)
 				return
 			}
@@ -285,12 +263,10 @@ func (sy sync) doSyncMock(id string) {
 			// The flag will be deleted after LockTTL
 			err = sy.etcdCli.SetSingleValueWithLease(FlagPrefix+id, strconv.Itoa(int(1)), LockTTL)
 			if err != nil {
-				//fmt.Println(err)
 				logger.Error.Print(err)
 				return
 			}
 		} else {
-			//fmt.Println(err)
 			logger.Error.Print(err)
 		}
 
@@ -298,12 +274,9 @@ func (sy sync) doSyncMock(id string) {
 		// Set ttl to KeeperPrefix
 		err = sy.etcdCli.SetSingleValueWithLease(KeeperPrefix+id, rid, 10)
 		if err != nil {
-			//fmt.Println(err)
 			logger.Error.Print(err)
 			return
 		}
-		//fmt.Println("### flag set to %s value is", FlagPrefix + id, 1)
-		//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"@@@ SYNC successfully on id:", fmt.Sprintf("%v", sy.cluster.Pid), id)
 		logger.Info.Printf("@@@ SYNC successfully on id:%v %s", sy.cluster.Pid, id)
 	}()
 }
@@ -338,14 +311,11 @@ func (re register) Process() {
 			}
 		}
 		re.cluster.Size, _ = re.cli.GetKeyNumber(RegPrefix)
-		//fmt.Println(time.Now().Format("2006-01-02 15:04:05"),"Cluster size changes to:", re.cluster.Size)
 		logger.Info.Printf("Cluster size changes to: %d", re.cluster.Size)
 		return nil
 	})
 	logger.Info.Printf("Cluster Regkey is: %s", re.cluster.RegKey)
 	logger.Info.Printf("Cluster size is: %d", re.cluster.Size)
-	//fmt.Println(time.Now().Format("2006-01-02 15:04:05"), "Cluster Regkey is:", re.cluster.RegKey)
-	//fmt.Println(time.Now().Format("2006-01-02 15:04:05"), "Cluster size is:", re.cluster.Size)
 }
 
 func (re register) doRegister() {
@@ -353,7 +323,6 @@ func (re register) doRegister() {
 	for {
 		_, regkey, err := re.cli.Register(key, LockTTL)
 		if err != nil {
-			//fmt.Println(err)
 			logger.Error.Print(err)
 			time.Sleep(time.Duration(1) * time.Second)
 		} else {
