@@ -51,6 +51,3 @@ $ credsvc -mock
 2. Watcher mutex based on distributed lock
 3. Http API for operation and maintenance
 4. Mock mode support skipping the interactive with sts for easily testing
-
-## TODO
- put withrev 和 refresh all

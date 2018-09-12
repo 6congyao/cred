@@ -111,7 +111,7 @@ func runHttpServer(chans *processor.Chans) {
 }
 
 func runProcessor(chans *processor.Chans, config Config) {
-	metaUrl := strings.Split(os.Getenv("CRED_META_URL"), ",")
+	metaUrl := strings.Split(os.Getenv(EnvMetaUrl), ",")
 	etcdCli, err := etcdv3.NewEtcdClient(metaUrl)
 
 	if err != nil {
