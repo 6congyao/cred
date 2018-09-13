@@ -29,7 +29,7 @@ $ dep ensure
 Prepare the envs :
 ```sh
 export CRED_PORT=<port> (Default: 9011)
-export CRED_META_URL=<meta_url>
+export CRED_META_URL=<meta_url>(All url of etcd node, separator is english comma, ",")
 export CRED_STS_URL=<sts_url>
 export CRED_SYNC_TTL=<sync_ttl> (Default: 3600)
 export CRED_LOG_LEVEL=<debug/info/warning/error> (Default: error)
