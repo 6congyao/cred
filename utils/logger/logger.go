@@ -1,12 +1,12 @@
 package logger
 
 import (
+	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
-	"fmt"
-	"time"
-	"io/ioutil"
 	"strings"
+	"time"
 )
 
 var (
@@ -17,6 +17,7 @@ var (
 )
 
 type Level int
+
 const (
 	EnvLogLevel = "CRED_LOG_LEVEL"
 )
@@ -54,7 +55,7 @@ func init() {
 
 	logLevelStr := os.Getenv(EnvLogLevel)
 
-	logLevel := ERROR
+	logLevel := DEBUG
 	for i, name := range levelNames {
 		if strings.EqualFold(name, logLevelStr) {
 			logLevel = Level(i)

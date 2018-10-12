@@ -22,6 +22,7 @@ import (
 	"cred/pkg/processor"
 	"cred/pkg/service"
 	"cred/pkg/transport"
+	loggerUtils "cred/utils/logger"
 	"flag"
 	"github.com/go-kit/kit/log"
 	"net/http"
@@ -30,7 +31,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	loggerUtils "cred/utils/logger"
 )
 
 const (
@@ -129,17 +129,8 @@ func runProcessor(chans *processor.Chans, config Config) {
 
 	cluster := &processor.Cluster{Mock: config.Mock}
 
-	reg := processor.NewRegister(etcdCli, cluster)
-	reg.Process()
-
-	sync := processor.NewSync(etcdCli, stsCli, ttl, cluster)
-	sync.Process()
-
-	watcher := processor.NewWatcher(etcdCli)
-	watcher.Process()
-
-	keeper := processor.NewKeeper(etcdCli)
-	keeper.Process()
+	dispatcher := processor.NewDispatcher(etcdCli, stsCli, ttl, cluster)
+	dispatcher.Process()
 
 	loggerUtils.Info.Printf("Cluster id is: %d", cluster.Pid)
 	loggerUtils.Info.Printf("Metadata url is: %s", metaUrl)
