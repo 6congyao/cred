@@ -55,7 +55,7 @@ func init() {
 
 	logLevelStr := os.Getenv(EnvLogLevel)
 
-	logLevel := DEBUG
+	logLevel := ERROR
 	for i, name := range levelNames {
 		if strings.EqualFold(name, logLevelStr) {
 			logLevel = Level(i)

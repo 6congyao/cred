@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"time"
 )
 
 // Dispatcher attempt to dispatch the tasks to workerpool
@@ -30,8 +31,9 @@ type dispatcher struct {
 	etcdCli *etcdv3.Client
 	stsCli  *sts.Client
 
-	ttl     int64
-	cluster *Cluster
+	ttl      int64
+	cluster  *Cluster
+	syncChan <-chan string
 
 	wp *workerPool
 }
@@ -43,7 +45,7 @@ func NewDispatcher(etcdCli *etcdv3.Client, stsCli *sts.Client, ttl int64, cluste
 		Logger:          logger.Error,
 	}
 
-	return &dispatcher{etcdCli, stsCli, ttl, cluster, wp}
+	return &dispatcher{etcdCli, stsCli, ttl, cluster, DefaultChans.SyncChan, wp}
 }
 
 func (di *dispatcher) Process() {
@@ -58,6 +60,21 @@ func (di *dispatcher) Process() {
 
 	keeper := NewKeeper(di.etcdCli, di.wp)
 	keeper.Process()
+
+	go func() {
+		for v := range di.syncChan {
+			if !di.wp.Serve(v) {
+				logger.Warn.Printf("The connection cannot be served because Server.Concurrency limit exceeded")
+				// The current server reached concurrency limit,
+				// so give other concurrently running servers a chance
+				// accepting incoming connections on the same address.
+				//
+				// There is a hope other servers didn't reach their
+				// concurrency limits yet :)
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+	}()
 }
 
 func (di *dispatcher) handler(id string) error {
@@ -71,14 +88,25 @@ func (di *dispatcher) handler(id string) error {
 }
 
 func (di dispatcher) doSync(id string) {
-
 	rid := "#" + fmt.Sprint(rand.Int63()%32768)
+	resetLease := false
+
 	s, m, err := di.etcdCli.Lock(MutexPrefix+id, LockTTL)
 	if err != nil {
 		logger.Error.Print(err)
 		return
 	}
-	defer di.etcdCli.Unlock(s, m)
+	defer func() {
+		if resetLease {
+			// Whatever, We keep setting ttl to KeeperPrefix
+			err = di.etcdCli.SetSingleValueWithLease(KeeperPrefix+id, rid, di.ttl)
+			if err != nil {
+				logger.Error.Print(err)
+			}
+		}
+
+		di.etcdCli.Unlock(s, m)
+	}()
 
 	// Check the offset flag
 	flag, err := di.etcdCli.GetSingleValue(FlagPrefix + id)
@@ -96,7 +124,6 @@ func (di dispatcher) doSync(id string) {
 			return
 		}
 	}
-
 	// Get bundle from WatcherPrefix
 	bundle, err := di.etcdCli.GetSingleValue(WatcherPrefix + id)
 	if err != nil {
@@ -112,6 +139,10 @@ func (di dispatcher) doSync(id string) {
 	}
 	// Attempt to call sts AssumeRole
 	credential, err := di.stsCli.AssumeRole(bundle)
+
+	// The lease should be reset here
+	resetLease = true
+
 	// Succeed
 	if err == nil {
 		// Set credential data to CredPrefix
@@ -132,20 +163,13 @@ func (di dispatcher) doSync(id string) {
 		logger.Error.Print(err)
 	}
 
-	// Whatever, We keep setting ttl to KeeperPrefix
-	err = di.etcdCli.SetSingleValueWithLease(KeeperPrefix+id, rid, di.ttl)
-	if err != nil {
-		logger.Error.Print(err)
-		return
-	}
-
 	logger.Info.Printf("Sync successfully on id: %v %s", di.cluster.Pid, id)
-
 }
 
 func (di dispatcher) doSyncMock(id string) {
-
 	rid := "#" + fmt.Sprint(rand.Int63()%32768)
+	resetLease := false
+
 	//fmt.Println("### Cluster size is", sy.cluster.Size)
 	//fmt.Println("### Try to lock:", sy.cluster.Pid)
 	s, m, err := di.etcdCli.Lock(MutexPrefix+id, LockTTL)
@@ -153,7 +177,17 @@ func (di dispatcher) doSyncMock(id string) {
 		logger.Error.Print(err)
 		return
 	}
-	defer di.etcdCli.Unlock(s, m)
+	defer func() {
+		if resetLease {
+			// Whatever, We keep setting ttl to KeeperPrefix
+			err = di.etcdCli.SetSingleValueWithLease(KeeperPrefix+id, rid, 10)
+			if err != nil {
+				logger.Error.Print(err)
+			}
+		}
+
+		di.etcdCli.Unlock(s, m)
+	}()
 
 	//fmt.Println("### Get the lock:", sy.cluster.Pid)
 	// Check the offset flag
@@ -193,10 +227,12 @@ func (di dispatcher) doSyncMock(id string) {
 	}
 	// Call sts AssumeRole
 	credential, err := di.stsCli.AssumeRoleMock(bundle)
+	// The lease should be reset here
+	resetLease = true
 	// Succeed
 	if err == nil {
 		// Set credential data to CredPrefix
-		err = di.etcdCli.SetSingleValue(CredPrefix+id, string(credential)+fmt.Sprintf("%v", di.cluster.Pid))
+		err = di.etcdCli.SetSingleValue(CredPrefix+id, string(credential)+fmt.Sprintf("%v", rid))
 		if err != nil {
 			logger.Error.Print(err)
 			return
@@ -212,14 +248,6 @@ func (di dispatcher) doSyncMock(id string) {
 	} else {
 		logger.Error.Print(err)
 	}
-
 	//fmt.Println("### credential write to", CredPrefix+id)
-	// Set ttl to KeeperPrefix
-	err = di.etcdCli.SetSingleValueWithLease(KeeperPrefix+id, rid, 10)
-	if err != nil {
-		logger.Error.Print(err)
-		return
-	}
 	logger.Info.Printf("@@@ SYNC successfully on id:%v %s", di.cluster.Pid, id)
-
 }

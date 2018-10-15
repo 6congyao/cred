@@ -38,6 +38,12 @@ func (re *register) Process() {
 	c := make(chan struct{})
 	go func() {
 		defer close(c)
+		var err error
+		re.cluster.Hostname, err = os.Hostname()
+		if err != nil {
+			logger.Error.Printf("Could not get the host name: %s", err)
+			close(re.doneChan)
+		}
 		re.cluster.Pid = os.Getpid()
 		re.doRegister()
 
@@ -61,7 +67,7 @@ func (re *register) Process() {
 }
 
 func (re *register) doRegister() {
-	key := fmt.Sprintf("%s%x", RegPrefix, re.cluster.Pid)
+	key := fmt.Sprintf("%s%s#%x", RegPrefix, re.cluster.Hostname, re.cluster.Pid)
 	for {
 		_, regkey, err := re.cli.Register(key, LockTTL)
 		if err != nil {

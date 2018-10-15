@@ -17,7 +17,9 @@ package processor
 
 import (
 	"cred/pkg/backend/etcdv3"
+	"cred/utils/logger"
 	"strings"
+	"time"
 )
 
 // Keeper monitoring the /iam/lease/
@@ -38,7 +40,16 @@ func (ke *keeper) Process() {
 			//fmt.Println("Put event:", string(k), string(v))
 		case 1:
 			//fmt.Println("Delete event:", string(k))
-			ke.wp.Serve(strings.TrimPrefix(string(k), KeeperPrefix))
+			if !ke.wp.Serve(strings.TrimPrefix(string(k), KeeperPrefix)) {
+				logger.Warn.Printf("The connection cannot be served because Server.Concurrency limit exceeded")
+				// The current server reached concurrency limit,
+				// so give other concurrently running servers a chance
+				// accepting incoming connections on the same address.
+				//
+				// There is a hope other servers didn't reach their
+				// concurrency limits yet :)
+				time.Sleep(100 * time.Millisecond)
+			}
 		}
 		return nil
 	})

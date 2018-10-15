@@ -32,8 +32,8 @@ const (
 	MaxQueueSize = 20
 	LockTTL      = 5
 
-// DefaultConcurrency is the maximum number of concurrent tasks
-// the Processor may serve by default
+	// DefaultConcurrency is the maximum number of concurrent tasks
+	// the Processor may serve by default
 	DefaultConcurrency = 256 * 1024
 )
 
@@ -42,10 +42,11 @@ type Processor interface {
 }
 
 type Cluster struct {
-	Size   int64
-	Pid    int
-	RegKey string
-	Mock   bool
+	Size     int64
+	Hostname string
+	Pid      int
+	RegKey   string
+	Mock     bool
 }
 
 type Chans struct {

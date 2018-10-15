@@ -19,6 +19,7 @@ import (
 	"cred/pkg/backend/etcdv3"
 	"cred/utils/logger"
 	"strings"
+	"time"
 )
 
 // Watcher monitoring the /iam/instance-profile/
@@ -35,7 +36,16 @@ func NewWatcher(cli *etcdv3.Client, wp *workerPool) Processor {
 func (wa *watcher) Process() {
 	go wa.cli.WatchPrefix(WatcherPrefix, func(t int32, k, v []byte) error {
 		// Trigger the sync immediately
-		wa.wp.Serve(strings.TrimPrefix(string(k), WatcherPrefix))
+		if !wa.wp.Serve(strings.TrimPrefix(string(k), WatcherPrefix)) {
+			logger.Warn.Printf("The connection cannot be served because Server.Concurrency limit exceeded")
+			// The current server reached concurrency limit,
+			// so give other concurrently running servers a chance
+			// accepting incoming connections on the same address.
+			//
+			// There is a hope other servers didn't reach their
+			// concurrency limits yet :)
+			time.Sleep(100 * time.Millisecond)
+		}
 
 		switch t {
 		case 0:
