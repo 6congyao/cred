@@ -87,9 +87,10 @@ func (di *dispatcher) handler(id string) error {
 	return nil
 }
 
-func (di dispatcher) doSync(id string) {
+func (di *dispatcher) doSync(id string) {
 	rid := "#" + fmt.Sprint(rand.Int63()%32768)
 	resetLease := false
+	var leaseTTL int64
 
 	s, m, err := di.etcdCli.Lock(MutexPrefix+id, LockTTL)
 	if err != nil {
@@ -98,8 +99,11 @@ func (di dispatcher) doSync(id string) {
 	}
 	defer func() {
 		if resetLease {
+			if leaseTTL == 0 {
+				leaseTTL = di.ttl
+			}
 			// Whatever, We keep setting ttl to KeeperPrefix
-			err = di.etcdCli.SetSingleValueWithLease(KeeperPrefix+id, rid, di.ttl)
+			err = di.etcdCli.SetSingleValueWithLease(KeeperPrefix+id, rid, leaseTTL)
 			if err != nil {
 				logger.Error.Print(err)
 			}
@@ -142,6 +146,7 @@ func (di dispatcher) doSync(id string) {
 
 	// The lease should be reset here
 	resetLease = true
+	leaseTTL = parseTTL(bundle)
 
 	// Succeed
 	if err == nil {
@@ -166,9 +171,10 @@ func (di dispatcher) doSync(id string) {
 	logger.Info.Printf("Sync successfully on id: %v %s", di.cluster.Pid, id)
 }
 
-func (di dispatcher) doSyncMock(id string) {
+func (di *dispatcher) doSyncMock(id string) {
 	rid := "#" + fmt.Sprint(rand.Int63()%32768)
 	resetLease := false
+	var leaseTTL int64
 
 	//fmt.Println("### Cluster size is", sy.cluster.Size)
 	//fmt.Println("### Try to lock:", sy.cluster.Pid)
@@ -179,6 +185,9 @@ func (di dispatcher) doSyncMock(id string) {
 	}
 	defer func() {
 		if resetLease {
+			if leaseTTL == 0 {
+				leaseTTL = di.ttl
+			}
 			// Whatever, We keep setting ttl to KeeperPrefix
 			err = di.etcdCli.SetSingleValueWithLease(KeeperPrefix+id, rid, 10)
 			if err != nil {
@@ -229,6 +238,7 @@ func (di dispatcher) doSyncMock(id string) {
 	credential, err := di.stsCli.AssumeRoleMock(bundle)
 	// The lease should be reset here
 	resetLease = true
+	leaseTTL = parseTTL(bundle)
 	// Succeed
 	if err == nil {
 		// Set credential data to CredPrefix
@@ -250,4 +260,9 @@ func (di dispatcher) doSyncMock(id string) {
 	}
 	//fmt.Println("### credential write to", CredPrefix+id)
 	logger.Info.Printf("@@@ SYNC successfully on id:%v %s", di.cluster.Pid, id)
+}
+
+// todo: parse the ttl from bundle, return 0 if error
+func parseTTL(data []byte) (int64) {
+	return 0
 }

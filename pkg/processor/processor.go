@@ -32,6 +32,8 @@ const (
 	MaxQueueSize = 20
 	LockTTL      = 5
 
+	DefaultCredentialLeaseTTL = 3600
+
 	// DefaultConcurrency is the maximum number of concurrent tasks
 	// the Processor may serve by default
 	DefaultConcurrency = 256 * 1024

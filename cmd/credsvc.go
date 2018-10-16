@@ -124,7 +124,7 @@ func runProcessor(chans *processor.Chans, config Config) {
 
 	ttl, err := strconv.ParseInt(os.Getenv(EnvTTL), 10, 64)
 	if err != nil {
-		ttl = int64(20)
+		ttl = int64(processor.DefaultCredentialLeaseTTL)
 	}
 
 	cluster := &processor.Cluster{Mock: config.Mock}
